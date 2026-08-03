@@ -46,7 +46,7 @@ are declared but untested.
 ### From a release
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/forkcloser/grid-clock-screensaver/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/forkcloser/grid-clock-screensaver/main/install.sh | bash
 ```
 
 The script downloads the latest release, verifies it, installs it into

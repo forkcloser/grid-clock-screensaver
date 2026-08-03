@@ -4,7 +4,7 @@
 # Downloads a published release, PROVES it is the one this project's CI built,
 # and installs it into your screensaver directory.
 #
-#   curl -fsSL https://raw.githubusercontent.com/forkcloser/grid-clock-screensaver/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/forkcloser/grid-clock-screensaver/main/install.sh | bash
 #
 # Why this script exists, and why it is not just a `cp`:
 #
