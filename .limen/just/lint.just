@@ -182,9 +182,13 @@ commits range="": (_banner "lint" "commits")
     # below verify signatures — this is convenience wiring, not enforcement.
     # See https://github.com/andyfeller/gh-ssh-allowed-signers for automation
     # to retrieve contributor keys.
+    # Best-effort: sandboxed agent sessions (e.g. Claude Code) write-protect
+    # .git/config as an escape-vector guard, and losing the display wiring must
+    # not fail the lint the rules below actually enforce.
     if [ -f .allowed_signers ]; then
         git config --unset-all gpg.ssh.allowedSignersFile 2>/dev/null || true
-        git config --add gpg.ssh.allowedSignersFile .allowed_signers
+        git config --add gpg.ssh.allowedSignersFile .allowed_signers 2>/dev/null ||
+            echo "note: .git/config not writable; signature display not armed" >&2
     fi
     range="{{ range }}"
     if [ -z "$range" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
@@ -232,17 +236,28 @@ aqua: (_banner "lint" "aqua")
         cp aqua-checksums.json "$tmpdir/snapshot"
         had=1
     fi
+    # Restore the working tree from the snapshot on EVERY exit — success, drift,
+    # an aqua failure (set -e), or an interrupt. update-checksum mutates
+    # aqua-checksums.json in place, and a lint must never leave that behind; an
+    # inline restore only runs on the paths it is written on, so it belongs in the
+    # trap. Installed AFTER the snapshot so `had` is known — restoring before that
+    # would wrongly rm a file we had not yet copied.
+    # Trap-invoked functions aren't seen as invoked, so this is false-flagged as
+    # dead code (SC2329) — https://github.com/koalaman/shellcheck/wiki/SC2329.
+    # shellcheck disable=SC2329
+    restore() {
+        if [ -n "$had" ]; then
+            cp "$tmpdir/snapshot" aqua-checksums.json
+        else
+            rm -f aqua-checksums.json
+        fi
+        rm -rf "$tmpdir"
+    }
+    trap restore EXIT
     # --log-level warn: the per-package INFO lines are noise when nothing is wrong.
     aqua --log-level warn update-checksum --prune
     if [ -n "$had" ] && cmp -s aqua-checksums.json "$tmpdir/snapshot"; then
         exit 0
-    fi
-    # Drift (or no checksums file at all): restore the tree exactly as it was
-    # before pointing at the fixer.
-    if [ -n "$had" ]; then
-        cp "$tmpdir/snapshot" aqua-checksums.json
-    else
-        rm -f aqua-checksums.json
     fi
     echo "aqua-checksums.json is out of sync with aqua.yaml — run 'just do fix aqua'." >&2
     exit 1

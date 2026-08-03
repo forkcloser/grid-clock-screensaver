@@ -25,7 +25,13 @@ import 'lib.just'
 add pkg: (_banner "tools" "add")
     #!/usr/bin/env bash
     set -euo pipefail
-    if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*{{ pkg }}([[:space:]]|@|$)" aqua.yaml; then
+    # Regex-escape the package name before it enters a grep -E / sed -E pattern.
+    # aqua slugs carry dots (github.com, golang.org), and an unescaped '.' is a
+    # wildcard: without this, `add foo/li.r` would match an existing `foo/liar`
+    # (and set/remove would edit/delete the wrong entry). ']' and '\' are omitted
+    # from the class — a Go module slug can contain neither, and both trip BSD sed.
+    esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
+    if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" aqua.yaml; then
         echo "{{ pkg }} is already in aqua.yaml — use 'just do tools update {{ pkg }}' or 'just do tools set {{ pkg }} <version>'." >&2
         exit 1
     fi
@@ -37,7 +43,9 @@ add pkg: (_banner "tools" "add")
 set pkg version: (_banner "tools" "set")
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*{{ pkg }}@" aqua.yaml; then
+    # Regex-escape the slug before grep -E / sed -E — see `add` for why.
+    esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
+    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}@" aqua.yaml; then
         echo "{{ pkg }} is not pinned in aqua.yaml — add it with 'just do tools add {{ pkg }}'." >&2
         exit 1
     fi
@@ -46,7 +54,7 @@ set pkg version: (_banner "tools" "set")
     # makes the mv a same-filesystem, truly atomic rename.
     tmp=$(mktemp aqua.yaml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
-    sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*{{ pkg }})@[^[:space:]]*#\1@{{ version }}#" aqua.yaml > "$tmp"
+    sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc})@[^[:space:]]*#\1@{{ version }}#" aqua.yaml > "$tmp"
     mv "$tmp" aqua.yaml
     aqua update-checksum --prune      # new checksum in, replaced version's out
     aqua install                      # REAL install: a bad pin fails here, not at first use
@@ -68,18 +76,30 @@ update command: (_banner "tools" "update")
 remove pkg: (_banner "tools" "remove")
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*{{ pkg }}([[:space:]]|@|$)" aqua.yaml; then
+    # Regex-escape the slug before grep -E — see `add` for why.
+    esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
+    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" aqua.yaml; then
         echo "{{ pkg }} is not in aqua.yaml — nothing to remove." >&2
         exit 1
     fi
     # See `set` for why mktemp gets an explicit sibling-path template.
     tmp=$(mktemp aqua.yaml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
+    # Match by an EXACT string compare on the parsed slug, not a regex built from
+    # it. A regex would make a dot in the name a wildcard (see `add`) and delete a
+    # sibling — and escaping for awk is unportable (its -v processing eats the
+    # backslashes), so we parse the slug out and compare literally instead. Drops
+    # the entry's line plus its indented continuation lines (registry:, etc.).
     awk -v pkg="{{ pkg }}" '
         function isCont(l) { return (l ~ /^[[:blank:]]+[^[:blank:]#-]/) }
         {
             if (skip) { if (isCont($0)) next; skip = 0 }
-            if ($0 ~ "^[[:blank:]]*-[[:blank:]]*name:[[:blank:]]*" pkg "([[:blank:]]|@|$)") { skip = 1; next }
+            if (match($0, /^[[:blank:]]*-[[:blank:]]*name:[[:blank:]]*/)) {
+                slug = substr($0, RLENGTH + 1)
+                sub(/[[:blank:]].*$/, "", slug)   # drop trailing spaces / comment
+                sub(/@.*$/, "", slug)             # drop @version
+                if (slug == pkg) { skip = 1; next }
+            }
             print
         }
     ' aqua.yaml > "$tmp"

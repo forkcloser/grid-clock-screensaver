@@ -4,6 +4,15 @@
 # recipe passes both files and lychee merges them, concatenating the exclude
 # lists — so this baseline only carries exclusions that apply everywhere.
 
+# Traverse dotted directories. lychee skips hidden paths by default, which
+# silently excludes documentation living under `.github/` — invisible in most
+# repositories (their markdown sits at the root or under book/), and total in
+# the org's `.github` repository, where every policy document IS in `.github/`.
+# A link check that quietly covers nothing is worse than no link check. This is
+# independent of .gitignore handling (lychee's separate --no-ignore, which we
+# never pass), so build artifacts stay excluded, and `.git` is not walked.
+hidden = true
+
 # Transient failures (5xx, 408, 429) are retried by lychee, but its defaults
 # (3 retries, 2s minimum wait) span mere seconds — shorter than a typical
 # GitHub 503 blip, so runs failed on weather. Widen the window instead of
