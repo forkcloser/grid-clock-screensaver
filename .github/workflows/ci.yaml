@@ -14,10 +14,7 @@ name: ci
 
 on:
   push:
-    # master, not main: this repository is a fork, and the default branch it
-    # inherited from upstream is master. Renaming it would break existing
-    # clones and forks for no benefit the fork gets back.
-    branches: [master]
+    branches: [main]
   pull_request:
 
 # No default token permissions: each job states what it needs. This workflow
