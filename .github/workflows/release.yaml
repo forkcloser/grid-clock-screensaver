@@ -1,0 +1,73 @@
+# DO NOT EDIT MANUALLY.
+# This workflow is generic — no project-specific content — and is destined to
+# become part of the canonical baseline limen distributes.
+#
+# The workflow half of the CI release lane: `just do release vX.Y.Z` on a
+# laptop verifies the tree, creates the SIGNED tag (a human signs the intent),
+# and pushes it — that push triggers this workflow, which builds, signs the
+# ARTIFACTS with keyless cosign (Fulcio: the workflow's OIDC identity replaces
+# any key — there is no key to store, leak, or rotate), and publishes the
+# GitHub release. Same construction rules as ci.yaml: one SHA-pinned
+# first-party action, checksum-verified aqua bootstrap, and the recipe as the
+# interface (`just do release --ci` — what it does is defined in
+# .limen/just/release.just, not here).
+#
+# Worth pairing with a repository ruleset restricting who can create v* tags:
+# the tag push is the release button.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+# One release at a time, never cancelled mid-publish.
+concurrency:
+  group: ${{ github.workflow }}
+
+# Every run step is bash, explicitly: runner-OS shell defaults are a trap
+# (windows defaults to PowerShell), and explicit bash adds `-eo pipefail`.
+# Uniform across all canonical workflows so adding a runner never changes
+# what the steps mean.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    # macOS, not the canonical ubuntu-24.04: the release artifact is an Xcode
+    # build. goreleaser's before-hook shells out to xcodebuild, which exists
+    # only here. The runner is arm64, but the bundle is universal either way —
+    # the generic/platform=macOS destination is what decides that, not the host.
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      # Publish the GitHub release and its assets.
+      contents: write
+      # Keyless signing: cosign exchanges the workflow's OIDC token for a
+      # short-lived Fulcio certificate bound to this workflow@tag identity.
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # goreleaser reads the full history for the changelog; the git
+          # credential is not needed after checkout (publishing goes through
+          # the API with the step-scoped token below).
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install aqua (pinned, checksum-verified)
+        uses: ./.github/actions/setup-aqua
+
+      - name: Install pinned tools
+        # Link-only: tools download lazily on first use, checksum-verified —
+        # the job pays only for what the release recipe runs.
+        run: aqua install --only-link
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # shellcheck disable=SC1010 # `do` is just's shared-task namespace, not the shell keyword.
+          just do release --ci

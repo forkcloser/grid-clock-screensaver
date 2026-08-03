@@ -1,0 +1,91 @@
+# goreleaser — https://goreleaser.com — release automation for Grid Clock.
+# Local dry-run: `just do release --local --dry-run` (no tag, no publish, artifacts
+# under build/release/). Real release: `just do release vX.Y.Z` (see .limen/just/release.just).
+version: 2
+
+project_name: grid-clock
+
+# Everything lands under build/release/ — covered by the canonical .gitignore
+# (/build); goreleaser's default dist/ is not. A subdirectory of build/, not
+# build/ itself: goreleaser --clean wipes its dist directory, and the Xcode
+# derived data the build recipe puts in build/ must survive a release run.
+dist: build/release
+
+# This is not a Go project, and goreleaser's own builders cannot drive Xcode
+# (the `prebuilt` builder, which imports externally-built binaries properly, is
+# Pro-only). So the artifact is produced by a before-hook and carried into the
+# release as an extra file, and the build pipe is skipped outright. The rest of
+# the lane — checksums, cosign, the GitHub release — is unchanged, which is the
+# point: `just do release` behaves here exactly as it does in a Go repo.
+before:
+  hooks:
+    # Twin of the `build` recipe in the root Justfile. A flag change here must
+    # land there too. The intended difference is none: both invoke the same
+    # scheme, configuration, and generic-macOS destination, so what ships is
+    # what a developer builds.
+    - xcodebuild -project "Grid Clock.xcodeproj" -scheme "Grid Clock" -configuration Release -destination generic/platform=macOS -derivedDataPath build build
+    # ditto, not zip: it is the only archiver that preserves a macOS bundle's
+    # symlinks, extended attributes, and code signature intact. A `zip -r` copy
+    # can arrive with a broken signature, which Gatekeeper then rejects for a
+    # reason that has nothing to do with how it was signed.
+    - bash -c 'mkdir -p build/assets && rm -f build/assets/*.zip && ditto -c -k --sequesterRsrc --keepParent "build/Build/Products/Release/Grid Clock.saver" "build/assets/grid-clock_{{ .Version }}_universal.zip"'
+    # Ship the installer next to the bundle so it is version-matched and covered
+    # by the same checksums file it verifies against.
+    - bash -c 'cp install.sh build/assets/install.sh'
+
+builds:
+  - id: no-go-build
+    skip: true
+
+# No archives: the artifact is already a zip, produced by ditto above. Wrapping
+# it in a goreleaser archive would ship a zip inside a zip.
+archives: []
+
+checksum:
+  # The single checksums file the installer and aqua verify release assets
+  # against. extra_files is what pulls the ditto output into it — without this
+  # the checksums file would be empty, there being no builds.
+  name_template: checksums.txt
+  extra_files:
+    - glob: build/assets/*.zip
+    - glob: build/assets/install.sh
+
+# cosign (v3, Sigstore bundle format) over the checksums file — signing that one
+# file transitively covers every artifact it lists. Two lanes, switched by
+# whether COSIGN_KEY is set (the `just do release` recipe controls that); see
+# .limen/just/release.just for both. The installer verifies the keyless form:
+#
+#   cosign verify-blob --bundle checksums.txt.sigstore.json \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --certificate-identity-regexp \
+#       'https://github.com/forkcloser/grid-clock-screensaver/\.github/workflows/release\.yaml@refs/tags/v.*' \
+#     checksums.txt
+#
+# goreleaser only substitutes ${signature}/${artifact} in args; ${COSIGN_KEY:-}
+# survives for the shell to branch on. One line, not a block scalar: yamlfmt
+# corrupts folded scalars (its internal line marker leaks into the content).
+signs:
+  - cmd: sh
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - -c
+      - 'if [ -n "${COSIGN_KEY:-}" ]; then cosign sign-blob --yes --key "${COSIGN_KEY}" --use-signing-config=false --bundle "${signature}" "${artifact}"; else cosign sign-blob --yes --bundle "${signature}" "${artifact}"; fi'
+
+release:
+  # The bundle and the installer are uploaded as release assets alongside the
+  # checksums file and its signature.
+  extra_files:
+    - glob: build/assets/*.zip
+    - glob: build/assets/install.sh
+  # Any prerelease-suffixed tag (e.g. the disposable v0.0.0-test.N tags used to
+  # exercise the pipeline) is published as a GitHub prerelease, so it can never
+  # become the repo's "latest release".
+  prerelease: auto
+  # Laptop releases fail halfway (network, guards) and get retried: overwrite
+  # assets a previous partial attempt already uploaded instead of 422-ing on
+  # "already_exists".
+  replace_existing_artifacts: true
+
+changelog:
+  sort: asc
