@@ -18,10 +18,27 @@ default: unit
 # timeout is project-overridable from the root Justfile, the home of all project
 # customization:
 #     export TEST_GO_TIMEOUT := '20m'
+#
+# A PASSING test's output is not shown by default — neither t.Log nor a direct
+# write to os.Stderr — so adding prints to chase a green-here/red-in-CI failure
+# looks like the prints never ran. Two independent layers suppress it: `go test`
+# discards a passing package's output entirely without -v, and gotestsum (which
+# passes -json, so it always HAS the output) hides it in its default format. To
+# see it:
+#     GOTESTSUM_FORMAT=standard-verbose just do test go
+#
+# Every recipe resolves CGO_ENABLED through lib.just's `go_cgo`, exactly as the
+# build module does, so a project declaring `export GO_CGO := '1'` TESTS the
+# artifact it ships. Left to go's own default this would be silently
+# environment-dependent — cgo is on for a native build only where a C toolchain
+# happens to be installed, so the same tree would test a cgo binary on a machine
+# with Xcode and a pure-Go one without it. `race` is the exception and forces 1
+# unconditionally: the race detector injects runtime/cgo regardless.
 
 # Unit tests.
 unit: (_banner "test go" "unit")
-    gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
+    CGO_ENABLED="{{ go_cgo }}" \
+        gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
 
 # Unit tests under the race detector. The final link is delegated to the
 # system linker: the race detector injects runtime/cgo into every package, and
@@ -36,7 +53,8 @@ race: (_banner "test go" "race")
 # Benchmarks, with allocation stats. -run '^$' deselects unit tests so only
 # benchmarks run — `just do test go` already covers the tests themselves.
 bench: (_banner "test go" "bench")
-    go test -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -run '^$' -bench . -benchmem ./...
+    CGO_ENABLED="{{ go_cgo }}" \
+        go test -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -run '^$' -bench . -benchmem ./...
 
 # Coverage: per-function summary, an HTML report under build/coverage/, and an
 # optional minimum gate — export TEST_GO_COVER_MIN := '80' (integer percent)
@@ -44,6 +62,7 @@ bench: (_banner "test go" "bench")
 cover: (_banner "test go" "cover")
     #!/usr/bin/env bash
     set -euo pipefail
+    export CGO_ENABLED="{{ go_cgo }}"
     dir=build/coverage
     mkdir -p "$dir"
     gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -coverprofile="$dir/coverage.out" ./...
@@ -51,7 +70,17 @@ cover: (_banner "test go" "cover")
     go tool cover -html="$dir/coverage.out" -o "$dir/coverage.html"
     echo "HTML report: $dir/coverage.html"
     min="${TEST_GO_COVER_MIN:-0}"
-    if [ "$min" -gt 0 ] 2>/dev/null; then
+    # Fail CLOSED on a malformed threshold. `[ "$min" -gt 0 ]` errors on a
+    # non-integer (a float like 80.0, a typo like 8O), and swallowing that error
+    # would silently skip the whole gate — a mistyped minimum must not disable
+    # enforcement. Reject anything that is not a whole number, loudly.
+    case "$min" in
+        ''|*[!0-9]*)
+            echo "TEST_GO_COVER_MIN must be a whole-number percentage (got '$min')." >&2
+            exit 2
+            ;;
+    esac
+    if [ "$min" -gt 0 ]; then
         total=$(go tool cover -func="$dir/coverage.out" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
         if [ "${total%%.*}" -lt "$min" ]; then
             echo "coverage ${total}% is below the ${min}% minimum" >&2
@@ -69,6 +98,7 @@ cover: (_banner "test go" "cover")
 profile: (_banner "test go" "profile")
     #!/usr/bin/env bash
     set -euo pipefail
+    export CGO_ENABLED="{{ go_cgo }}"
     prof=build/profiles
     docs=build/profiles-docs
     mkdir -p "$prof" "$docs"
@@ -86,7 +116,12 @@ profile: (_banner "test go" "profile")
         echo "  -> $png"
     }
     for pkg in $(go list ./...); do
-        name=${pkg##*/}
+        # Filename-safe name from the FULL import path, not just the last segment:
+        # example/a/client and example/b/client both end in "client" and would
+        # otherwise overwrite each other's binary and profiles. '/' -> '__'; the
+        # only other char a Go import path carries that matters here is '.', which
+        # is already filename-safe.
+        name=${pkg//\//__}
         echo "Profiling $pkg..."
         go test -count=1 -o "$prof/$name.test" "$pkg" \
             -cpuprofile "$prof/${name}_cpu.prof" \

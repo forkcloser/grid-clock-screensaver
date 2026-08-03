@@ -53,12 +53,17 @@ jobs:
         # to be the portability floor the shared recipes target (/bin/bash 3.2),
         # so the one leg we keep is the strict one.
         #
-        # Both architectures, because the release is universal: an arm64-only
-        # CI would let an x86_64 regression reach a published bundle.
-        os: [macos-15, macos-15-intel]
+        # arm64 only, and this is a KNOWN GAP rather than a judgement that
+        # x86_64 does not matter: the release is a universal bundle, so an
+        # x86_64 regression can still reach it unseen. A macos-15-intel leg
+        # reports darwin/amd64, which the canonical aqua.yaml's supported_envs
+        # does not list — with require_checksum the run dies on the first tool
+        # ("checksum is required"), and that block is content-pinned, so this
+        # repository cannot widen it alone. Restoring the leg means adding
+        # darwin/amd64 to limen's canonical baseline, org-wide.
+        os: [macos-15]
     runs-on: ${{ matrix.os }}
-    # Generous for the windows legs: those runners are markedly slower, and the
-    # per-GOOS lint recipes now run three legs each.
+    # Generous: xcodebuild dominates, and the macOS runners are not fast.
     timeout-minutes: 45
     permissions:
       contents: read
@@ -86,3 +91,30 @@ jobs:
 
       - name: Test
         run: just test
+
+  # The ONE required status check (see defaultRequiredChecks in limen's
+  # internal/github/audit.go). Branch protection names contexts as strings, so
+  # requiring the matrix legs directly would bake this workflow's runner list
+  # into the ruleset — and this repository's matrix is deliberately not the
+  # canonical one, so it would name legs that never report. This job collapses
+  # the matrix, whatever its shape, to a single stable name.
+  gate:
+    needs: [verify]
+    # always(), and the result asserted explicitly. Without always() a failed
+    # or cancelled dependency SKIPS this job instead of failing it, and a
+    # skipped required check does not block a merge — branch protection that
+    # quietly stops protecting. `needs.verify.result` is success only when
+    # every matrix leg succeeded.
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every verify leg succeeded
+        env:
+          # Via env, never interpolated into the script: the shell sees data,
+          # not something the expression layer can rewrite into code.
+          RESULT: ${{ needs.verify.result }}
+        run: |
+          printf 'verify: %s\n' "$RESULT"
+          [ "$RESULT" = "success" ]

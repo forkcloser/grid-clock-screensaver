@@ -15,11 +15,16 @@
 #       INTENT), push — the release workflow builds, signs the artifacts
 #       (keyless cosign), and publishes.
 #
-#   just do release --local <cosign-key> vX.Y.Z [--cosign-password <password>]
-#       The fully local lane: tag + goreleaser + key-based cosign from this
-#       machine. The key path is a mandatory argument; the password is
-#       prompted when not given. For private repos (nothing touches Rekor's
-#       public log) — and the escape hatch when CI is down.
+#   just do release --local <cosign-key> vX.Y.Z [--cosign-password-stdin]
+#       The fully local lane: goreleaser + key-based cosign from this machine,
+#       and the SOLE publisher — it pushes the commit but not the tag, so it does
+#       not re-trigger the CI release workflow (goreleaser creates the GitHub
+#       release, and its remote tag, itself). The key path is a mandatory
+#       argument; the passphrase is read from stdin with --cosign-password-stdin —
+#       piped, so it never lands in argv or shell history (`pass show cosign |
+#       just do release … --cosign-password-stdin`) — and prompted on the terminal
+#       when the flag is absent. For private repos (nothing touches Rekor's public
+#       log) — and the escape hatch when CI is down.
 #
 #   just do release --local --dry-run
 #       Unsigned local snapshot into build/release/: no tag, no token, no
@@ -44,7 +49,7 @@ release *args:
     fi
     usage() {
         echo "usage: just do release <tag>                                               # signed tag + push; CI builds, signs (keyless), publishes" >&2
-        echo "       just do release --local <cosign-key> <tag> [--cosign-password <p>]  # fully local, key-based cosign" >&2
+        echo "       just do release --local <cosign-key> <tag> [--cosign-password-stdin] # fully local, key-based cosign" >&2
         echo "       just do release --local --dry-run                                   # local unsigned snapshot into build/release/" >&2
         echo "       just do release --ci                                                # workflow half of the default lane (GitHub Actions only)" >&2
     }
@@ -63,7 +68,7 @@ release *args:
             exit 2
         fi
     }
-    tag_and_push() {
+    ensure_signed_tag() {
         # Create the signed tag — unless it already exists pointing at HEAD, so
         # a retry after a failed publish resumes instead of failing here.
         if existing=$(git rev-parse -q --verify "refs/tags/$1^{commit}"); then
@@ -71,10 +76,32 @@ release *args:
                 echo "tag $1 already exists and does not point at HEAD — refusing." >&2
                 exit 1
             fi
-            echo "tag $1 already on HEAD — reusing it."
+            # Only reuse a pre-existing tag if it is itself SIGNED — otherwise a
+            # lightweight or unsigned tag placed on HEAD by hand would be pushed,
+            # silently bypassing the `git tag -s` guarantee. We check that a
+            # signature block is PRESENT (a lightweight tag has no tag object;
+            # `git cat-file tag` on it fails and greps empty) rather than running
+            # `git verify-tag`: verification additionally needs the signer's key
+            # to be trusted — the GPG keyring, or gpg.ssh.allowedSignersFile for
+            # SSH — and would reject a legitimately SSH-signed tag when that is
+            # not set up, breaking the very retry this branch exists for.
+            if ! git cat-file tag "refs/tags/$1" 2>/dev/null | grep -qE '^-----BEGIN [A-Z0-9]+ SIGNATURE-----'; then
+                echo "tag $1 is on HEAD but is not a signed tag — refusing to reuse it." >&2
+                echo "delete it and let the release create a fresh signed tag: git tag -d $1" >&2
+                exit 1
+            fi
+            echo "tag $1 already on HEAD (signed) — reusing it."
         else
             git tag -s "$1" -m "$1"
         fi
+    }
+    # The DEFAULT (CI) lane's publish trigger: create the signed tag and push it.
+    # Pushing a v* tag is what starts the release workflow — this is the ONE event
+    # that owns publication in the CI lane. The --local lane, by contrast, pushes
+    # only HEAD (never the tag) so it does NOT re-trigger this workflow: exactly
+    # one publisher per release. See the --local lane below.
+    tag_and_push() {
+        ensure_signed_tag "$1"
         git push origin HEAD
         git push origin "refs/tags/$1"
     }
@@ -94,15 +121,14 @@ release *args:
             shift
             tag=""
             password=""
+            password_from_stdin=""
             while [ $# -gt 0 ]; do
                 case "$1" in
-                    --cosign-password)
-                        if [ $# -lt 2 ]; then
-                            echo "--cosign-password needs a value." >&2
-                            exit 2
-                        fi
-                        password="$2"
-                        shift 2
+                    --cosign-password-stdin)
+                        # A boolean flag, NOT a value: the passphrase is read from
+                        # stdin below, so it never enters argv or shell history.
+                        password_from_stdin=1
+                        shift
                         ;;
                     -*)
                         echo "unknown option: $1" >&2
@@ -135,17 +161,46 @@ release *args:
                 echo "GITHUB_TOKEN is not set — goreleaser needs it to publish the GitHub release." >&2
                 exit 1
             fi
-            if [ -z "$password" ]; then
-                # cosign under goreleaser cannot prompt (no tty on its stdin):
-                # collect the passphrase up front. Empty is legal — it means an
-                # unencrypted key.
+            # cosign under goreleaser cannot prompt (no tty on its stdin), so the
+            # passphrase is collected here and handed down via COSIGN_PASSWORD.
+            # That env hand-off to the goreleaser→cosign subtree is unavoidable —
+            # cosign has no other non-interactive channel — so the goal here is to
+            # keep the passphrase out of argv/history and out of the caller's own
+            # shell env: read it once, scoped to this run. Empty is legal (an
+            # unencrypted key).
+            if [ -n "$password_from_stdin" ]; then
+                # --cosign-password-stdin: the passphrase is piped in, so `cat`
+                # would echo it in cleartext if stdin were the terminal. Refuse
+                # that footgun and point at the two safe forms.
+                if [ -t 0 ]; then
+                    echo "--cosign-password-stdin expects the passphrase piped on stdin, but stdin is a terminal." >&2
+                    echo "pipe it (e.g. 'pass show cosign | just do release --local $key $tag --cosign-password-stdin'), or drop the flag to be prompted." >&2
+                    exit 2
+                fi
+                # Read ALL of stdin; command substitution strips trailing
+                # newlines, so a here-string, a `printf | ` pipe, and a file with
+                # or without a trailing newline all yield the same passphrase.
+                password=$(cat)
+            else
+                # No stdin channel: prompt on the terminal itself (/dev/tty, never
+                # fd 0 — goreleaser may want stdin, and fd 0 may be redirected).
                 printf 'cosign key password (empty for an unencrypted key): ' >&2
-                read -rs password
+                read -rs password < /dev/tty
                 echo >&2
             fi
             export COSIGN_KEY="$key"
             export COSIGN_PASSWORD="$password"
-            tag_and_push "$tag"
+            # Sole-publisher discipline: create the signed tag and push the COMMIT,
+            # but NOT the tag. goreleaser publishes the GitHub release itself (it
+            # only needs the tag locally — `validate` checks the working tree, not
+            # the remote — and creates the release, and its remote tag, through the
+            # API). Because no `git push` of a v* tag happens, the release workflow
+            # (on: push tags) never fires, so this machine is the only publisher —
+            # no race with a second, CI-driven GoReleaser. The signed tag stays
+            # local (the local lane is for private repos / a CI-down escape hatch);
+            # the default lane is the one that puts a signed tag on the remote.
+            ensure_signed_tag "$tag"
+            git push origin HEAD
             exec goreleaser release --clean
             ;;
         --ci)
