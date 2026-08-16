@@ -13,8 +13,13 @@
   commitBody: "Signed-off-by: renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>",
   // The update-aqua-checksum workflow pushes a fix-up commit onto Renovate's
   // branches; without this, Renovate treats the branch as human-modified and
-  // stops rebasing it.
-  gitIgnoredAuthors: ["41898282+github-actions[bot]@users.noreply.github.com"],
+  // stops rebasing it. Two identities: the org's limen-ci-forkcloser App (the
+  // credential the workflow prefers, so that CI re-runs on the fix-up), and
+  // the default GITHUB_TOKEN it falls back to.
+  gitIgnoredAuthors: [
+    "317468017+limen-ci-forkcloser[bot]@users.noreply.github.com",
+    "41898282+github-actions[bot]@users.noreply.github.com",
+  ],
   customManagers: [
     // The aqua preset above only manages the lowercase `aqua_version:` input of
     // the official installer action, and aqua.yaml itself. The AQUA_VERSION env
