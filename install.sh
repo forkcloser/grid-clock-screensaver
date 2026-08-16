@@ -94,6 +94,9 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(uname -s)" = "Darwin" ] || die "this is a macOS screensaver; uname says $(uname -s)"
+# arm64 only: the bundle carries no x86_64 slice, and darwin/amd64 is not a
+# supported platform. Fail here rather than after the download.
+[ "$(uname -m)" = "arm64" ] || die "this build is for Apple silicon (arm64) only; uname says $(uname -m)"
 
 major=$(sw_vers -productVersion | cut -d. -f1)
 if [ "$major" -lt 14 ]; then
@@ -122,7 +125,7 @@ esac
 
 # The asset names goreleaser produces are keyed on the version WITHOUT the v.
 bare="${version#v}"
-archive="grid-clock_${bare}_universal.zip"
+archive="grid-clock_${bare}_arm64.zip"
 base="https://github.com/${REPO}/releases/download/${version}"
 
 workdir=$(mktemp -d)

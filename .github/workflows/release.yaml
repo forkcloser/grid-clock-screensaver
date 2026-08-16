@@ -22,9 +22,16 @@ on:
 
 permissions: {}
 
-# One release at a time, never cancelled mid-publish.
+# One release at a time PER TAG, never cancelled mid-publish. The group MUST be
+# keyed by the ref, not a constant: a constant group puts every tag's release in
+# one queue, and GitHub keeps only the newest *pending* run per group — so pushing
+# several tags at once ("Canceling since a higher priority waiting request …")
+# silently cancels the queued releases for the older tags. Keying by ref makes each
+# tag its own group: different tags never cancel each other, and a re-push of the
+# SAME tag serializes behind an in-flight run rather than cancelling it
+# (cancel-in-progress stays unset, so a publish in progress is never interrupted).
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
 
 # Every run step is bash, explicitly: runner-OS shell defaults are a trap
 # (windows defaults to PowerShell), and explicit bash adds `-eo pipefail`.
@@ -38,8 +45,9 @@ jobs:
   release:
     # macOS, not the canonical ubuntu-24.04: the release artifact is an Xcode
     # build. goreleaser's before-hook shells out to xcodebuild, which exists
-    # only here. The runner is arm64, but the bundle is universal either way —
-    # the generic/platform=macOS destination is what decides that, not the host.
+    # only here. arm64 runner, arm64 bundle: darwin/amd64 is not a supported
+    # platform, and the project's ARCHS says so — the generic/platform=macOS
+    # destination merely keeps the build independent of the host.
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
@@ -49,7 +57,7 @@ jobs:
       # short-lived Fulcio certificate bound to this workflow@tag identity.
       id-token: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # goreleaser reads the full history for the changelog; the git
           # credential is not needed after checkout (publishing goes through

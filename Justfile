@@ -19,9 +19,9 @@ fix: do::fix::default
 test: test-parity test-bundle
 
 # Build the screensaver bundle. Release by default; `just build Debug` for the
-# debug configuration. Universal (arm64 + x86_64): the generic macOS
-# destination is what makes it so — without it xcodebuild builds for this
-# machine's architecture only.
+# debug configuration. arm64 only — darwin/amd64 is not a supported platform
+# anywhere in the organization, and the project's ARCHS says so. The generic
+# macOS destination keeps the build independent of the host machine.
 [doc('Build the .saver bundle (configuration: Release or Debug)')]
 build configuration='Release':
     #!/usr/bin/env bash
