@@ -22,13 +22,14 @@ before:
     # Twin of the `build` recipe in the root Justfile. A flag change here must
     # land there too. The intended difference is none: both invoke the same
     # scheme, configuration, and generic-macOS destination, so what ships is
-    # what a developer builds.
+    # what a developer builds — an arm64-only bundle (the project's ARCHS;
+    # darwin/amd64 is not a supported platform).
     - xcodebuild -project "Grid Clock.xcodeproj" -scheme "Grid Clock" -configuration Release -destination generic/platform=macOS -derivedDataPath build build
     # ditto, not zip: it is the only archiver that preserves a macOS bundle's
     # symlinks, extended attributes, and code signature intact. A `zip -r` copy
     # can arrive with a broken signature, which Gatekeeper then rejects for a
     # reason that has nothing to do with how it was signed.
-    - bash -c 'mkdir -p build/assets && rm -f build/assets/*.zip && ditto -c -k --sequesterRsrc --keepParent "build/Build/Products/Release/Grid Clock.saver" "build/assets/grid-clock_{{ .Version }}_universal.zip"'
+    - bash -c 'mkdir -p build/assets && rm -f build/assets/*.zip && ditto -c -k --sequesterRsrc --keepParent "build/Build/Products/Release/Grid Clock.saver" "build/assets/grid-clock_{{ .Version }}_arm64.zip"'
     # Ship the installer next to the bundle so it is version-matched and covered
     # by the same checksums file it verifies against.
     - bash -c 'cp install.sh build/assets/install.sh'

@@ -115,8 +115,8 @@ xcodebuild -project 'Grid Clock.xcodeproj' -scheme 'Grid Clock' \
            -derivedDataPath build build
 ```
 
-`-destination 'generic/platform=macOS'` is what produces a universal
-(arm64 + x86_64) binary. Without it you get one for your own architecture only.
+`-destination 'generic/platform=macOS'` keeps the build independent of the host
+machine. The bundle is arm64 only — Intel Macs are not a supported platform.
 
 ### 3. Select it
 
@@ -191,7 +191,7 @@ Behaviour is otherwise identical to 0.0.5.
   deprecated since macOS 10.8.
 - **Project file rebuilt.** Modern object version, current warning set (the
   build is warning-clean under it), separate Debug and Release settings that
-  actually differ, universal `ARCHS`, hardened runtime, and a checked-in shared
+  actually differ, arm64-only `ARCHS`, hardened runtime, and a checked-in shared
   scheme so `xcodebuild -scheme` works straight from a clone. `Info.plist` is
   gone — it is generated from build settings now.
 
