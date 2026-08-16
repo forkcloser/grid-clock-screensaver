@@ -25,12 +25,22 @@
 #     code the branch controls. `aqua update-checksum` only downloads and
 #     hashes declared artifacts; the converge step executes exactly one
 #     binary, the checksum-pinned limen release the branch declares.
-#   - The push step runs only git, with the token scoped to that single step.
+#   - The commit step runs only runner-provided tools (git, jq, base64,
+#     curl) — no branch-pinned binary ever touches the token, which is
+#     scoped to that single step.
 #   - The branch name reaches the shell via env, never template interpolation
 #     (script-injection hygiene).
-#   - No loop: a push made with the default GITHUB_TOKEN triggers no further
-#     workflows — and the no-change early exit terminates recursion
+#   - No loop: a commit made with the default GITHUB_TOKEN triggers no
+#     further workflows — and the no-change early exit terminates recursion
 #     regardless.
+#
+# The commit is created through the GraphQL createCommitOnBranch mutation,
+# never a local `git commit` + push: GitHub signs the mutation's commits, and
+# the `limen:main` ruleset requires signatures — an unsigned fix-up commit
+# made every aqua-bump PR unmergeable (see the commit step for the full
+# argument). Consequence of the mutation: the commit's author IS the token's
+# identity, always — with the default token that is github-actions[bot],
+# already listed in the canonical renovate.json5's gitIgnoredAuthors.
 #
 # Known trade of the default token: GitHub suppresses workflow runs for
 # commits it pushes, so the PR's CI does not re-run on the checksum commit.
@@ -42,6 +52,10 @@
 # long-lived broad credential and nothing that expires on a calendar. A
 # fine-grained PAT with contents:write as UPDATE_AQUA_CHECKSUM_TOKEN is the
 # drop-in alternative; the token preference order is App, PAT, default.
+# With an App or PAT the commit is authored as that identity (the mutation
+# offers no override), so it must be added to gitIgnoredAuthors in
+# renovate.json5 — or Renovate treats the branch as human-modified and
+# stops rebasing it.
 name: update-aqua-checksum
 
 on:
@@ -111,27 +125,72 @@ jobs:
           # happens to hold now or later.
           permission-contents: write
 
-      - name: Push the update, if any
+      - name: Commit the update through the API, if any
         env:
           BRANCH: ${{ github.ref_name }}
           TOKEN: ${{ steps.app-token.outputs.token || secrets.UPDATE_AQUA_CHECKSUM_TOKEN || github.token }}
         run: |
           [ -z "$(git status --porcelain)" ] && { echo "checksums and baseline already in sync"; exit 0; }
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # `--all` is deliberate, not sloppiness. The tree is fully accounted
-          # for: a fresh checkout, aqua rooted outside the workspace, and
-          # exactly two writers between checkout and here — update-checksum
-          # and the pinned limen's fix. Whatever is dirty IS the payload. An
-          # enumerated path list would be wrong: the converge step's job is to
-          # commit whatever the NEW limen's baseline says, and a list baked
-          # into the older running workflow cannot know that surface (the
-          # updated workflow arrives in the very commit being built). Nor
-          # would a list add safety — the only writer that could plant a file
-          # is limen fix itself, and .limen/.github would be on any list.
-          git add --all
+          # The commit is made through GraphQL createCommitOnBranch, not a
+          # local `git commit` + push, because commits made through that
+          # mutation are signed by GitHub — and the `limen:main` ruleset
+          # requires signatures on everything landing on the default branch.
+          # A plain git push is unsigned, and one unsigned commit on the
+          # branch made every aqua-bump PR unmergeable: a merge commit would
+          # land it, GitHub disables rebase while signatures are required,
+          # and squash of a bot-authored PR is refused to everyone but the
+          # bot (see limen's book/github.md).
+          #
+          # Enumerating the whole dirty tree is deliberate, not sloppiness.
+          # The tree is fully accounted for: a fresh checkout, aqua rooted
+          # outside the workspace, and exactly two writers between checkout
+          # and here — update-checksum and the pinned limen's fix. Whatever
+          # is dirty IS the payload. An enumerated path list would be wrong:
+          # the converge step's job is to commit whatever the NEW limen's
+          # baseline says, and a list baked into the older running workflow
+          # cannot know that surface (the updated workflow arrives in the
+          # very commit being built). Nor would a list add safety — the only
+          # writer that could plant a file is limen fix itself, and
+          # .limen/.github would be on any list.
+          #
+          # Limit of the mutation, accepted: FileAddition carries no file
+          # mode, so an executable bit cannot travel — both writers here
+          # only ever produce plain configuration files.
+          additions="[]"
+          deletions="[]"
+          while IFS= read -r -d '' entry; do
+            path="${entry:3}"
+            if [ -f "${path}" ]; then
+              additions="$(jq --arg path "${path}" --arg contents "$(base64 -w0 "${path}")" \
+                '. + [{path: $path, contents: $contents}]' <<<"${additions}")"
+            else
+              deletions="$(jq --arg path "${path}" '. + [{path: $path}]' <<<"${deletions}")"
+            fi
+          done < <(git status --porcelain -z)
           # Signed-off-by: `just do lint commits` enforces DCO on the PR range,
           # bot commits included.
-          git commit -m "chore: update aqua checksums and converge the limen baseline" \
-            -m "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
-          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${BRANCH}"
+          payload="$(jq -n \
+            --arg query 'mutation ($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }' \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg branch "${BRANCH}" \
+            --arg head "$(git rev-parse HEAD)" \
+            --argjson additions "${additions}" \
+            --argjson deletions "${deletions}" \
+            '{query: $query, variables: {input: {
+              branch: {repositoryNameWithOwner: $repository, branchName: $branch},
+              expectedHeadOid: $head,
+              message: {
+                headline: "chore: update aqua checksums and converge the limen baseline",
+                body: "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+              },
+              fileChanges: {additions: $additions, deletions: $deletions}}}}')"
+          # GraphQL reports failure in-body over HTTP 200, so success is the
+          # presence of the new commit oid, never the HTTP status.
+          response="$(curl -sS -X POST -H "Authorization: bearer ${TOKEN}" \
+            -d "${payload}" https://api.github.com/graphql)"
+          oid="$(jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"${response}")"
+          if [ -z "${oid}" ]; then
+            echo "${response}" >&2
+            exit 1
+          fi
+          echo "pushed ${oid}"
