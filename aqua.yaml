@@ -18,9 +18,11 @@ registries:
 
 packages:
   # --- go install tools (local registry, GOSUMDB-verified) ---
-  - name: github.com/google/go-licenses/v2@v2.0.1
+  - name: github.com/google/go-licenses/v2
+    version: v2.0.1 # renovate: depName=_go/github.com/google/go-licenses/v2
     registry: local
-  - name: github.com/vbatts/git-validation@v1.2.2
+  - name: github.com/vbatts/git-validation
+    version: v1.2.2 # renovate: depName=_go/github.com/vbatts/git-validation
     registry: local
   - name: golang.org/x/vuln/cmd/govulncheck@v1.5.0
     registry: local
@@ -29,13 +31,15 @@ packages:
   # Pseudo-version: the nested cmd/dot module carries no tags upstream.
   - name: github.com/goccy/go-graphviz/cmd/dot@v0.0.0-20251129032125-76e04975df88
     registry: local
-  - name: github.com/farcloser/godolint/cmd/godolint@v0.1.0
+  - name: github.com/farcloser/godolint/cmd/godolint
+    version: v0.1.0 # renovate: depName=_go/github.com/farcloser/godolint/cmd/godolint
     registry: local
   # --- farcloser tools (local registry; standard once registered upstream) ---
-  - name: farcloser/limen@v0.0.13 # renovate: depName=farcloser/limen
+  - name: farcloser/limen@v0.0.15 # renovate: depName=farcloser/limen
     registry: local
   # --- toolchain + binary-release tools (standard registry, aqua-verified) ---
-  - name: golang/go@go1.26.4
+  - name: golang/go
+    version: go1.26.4 # renovate: depName=golang/go
   - name: casey/just@1.55.1
   - name: koalaman/shellcheck@v0.11.0
   - name: golangci/golangci-lint@v2.12.2
@@ -44,5 +48,6 @@ packages:
   - name: goreleaser/goreleaser@v2.16.0
   - name: sigstore/cosign@v3.1.1
   - name: gotestyourself/gotestsum@v1.13.0
-  - name: jqlang/jq@jq-1.8.2
+  - name: jqlang/jq
+    version: jq-1.8.2 # renovate: depName=jqlang/jq
   - name: cli/cli@v2.96.0
