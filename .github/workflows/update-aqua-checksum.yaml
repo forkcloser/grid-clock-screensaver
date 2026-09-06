@@ -89,6 +89,14 @@ jobs:
 
       - name: Install aqua (pinned, checksum-verified)
         uses: ./.github/actions/setup-aqua
+        with:
+          # No token for aqua here, by doctrine: this job's token carries
+          # contents:write, and the update steps below run a branch-declared
+          # binary (the branch's limen pin). Unauthenticated API calls are
+          # rate-limited per runner IP; this is one job per Renovate branch,
+          # and a 403 here fails loudly and is rerun — a write token in the
+          # environment of branch-controlled code would not fail loudly.
+          github-token: ""
 
       - name: Regenerate aqua-checksums.json
         # No tool install: update-checksum only reads the manifest and hashes

@@ -1,6 +1,12 @@
 name: Setup aqua
 description: >
   Install aqua (pinned, checksum-verified), put its bin directory on PATH, and authorize the repository's committed policy. aqua itself is the one tool aqua cannot pin. Same pins as limen-install: the installer script is fetched at an exact tag and checksum-verified, and it installs an exact aqua version.
+inputs:
+  github-token:
+    description: >
+      Token aqua authenticates its GitHub API calls with (exported as AQUA_GITHUB_TOKEN for the rest of the job). aqua resolves every github_release package through the API — the release by tag, its assets, the checksum file — and unauthenticated calls are limited to 60/hour PER IP, an IP the hosted runners share with every other tenant: "403 API rate limit exceeded" on the first tool a lint leg touches is that limit, not this repository's usage. The job's own token lifts it to a per-token budget. Default: the job's token, whose permissions the job declares (contents: read on every canonical read-only job). Pass "" to opt out — the write-capable checksum workflow does, by doctrine.
+    required: false
+    default: ${{ github.token }}
 runs:
   using: composite
   steps:
@@ -44,7 +50,41 @@ runs:
           echo "${AQUA_INSTALLER_SHA256}  ${tmp}/aqua-installer" | shasum -a 256 -c -
         fi
         chmod +x "${tmp}/aqua-installer"
-        "${tmp}/aqua-installer" -v "${AQUA_VERSION}"
+        # The installer picks aqua's build from `uname -m`. On the windows
+        # arm64 runners that answer is WRONG: Git for Windows' arm64 build
+        # ships an x86_64 Git Bash (git.exe is native; bash, coreutils and
+        # uname are not — its release notes say so), so under this shell
+        # `uname -m` is x86_64, the installer fetches aqua_windows_amd64, and
+        # that aqua then resolves EVERY package for windows/amd64: go, just,
+        # gotestsum, the race runtime — the whole leg emulated, and no arm64
+        # coverage at all. The runner knows what it is (RUNNER_ARCH); tell the
+        # installer through the one input it reads. A shim on PATH, for the
+        # installer's process only, answering `uname -m` with aarch64: the
+        # installer's own checksum table already covers aqua_windows_arm64
+        # and its bootstrap aqua then installs the pinned version natively —
+        # every byte still verified the same way, only the choice corrected.
+        # Self-retiring: skipped once the shell's uname is honest.
+        if [ "${RUNNER_OS:-}" = "Windows" ] && [ "${RUNNER_ARCH:-}" = "ARM64" ] && [ "$(uname -m)" != "aarch64" ]; then
+          echo "windows/arm64 runner under an emulated shell (uname -m: $(uname -m)); steering the installer to arm64"
+          mkdir -p "${tmp}/shim"
+          real_uname="$(command -v uname)"
+          printf '#!/usr/bin/env bash\nif [ "${1:-}" = "-m" ]; then echo aarch64; else exec "%s" "$@"; fi\n' "${real_uname}" >"${tmp}/shim/uname"
+          chmod +x "${tmp}/shim/uname"
+          PATH="${tmp}/shim:${PATH}" "${tmp}/aqua-installer" -v "${AQUA_VERSION}"
+          # Assert, do not assume: read the PE machine field of the installed
+          # binary (0xAA64 = ARM64, 0x8664 = AMD64). If this ever fails, the
+          # leg is silently emulated again — better red than slow and false.
+          exe="${AQUA_ROOT_DIR}/bin/aqua.exe"
+          pe_offset="$(od -An -tu4 -j 60 -N 4 "${exe}" | tr -d ' ')"
+          machine="$(od -An -tx2 -j "$((pe_offset + 4))" -N 2 "${exe}" | tr -d ' ')"
+          if [ "${machine}" != "aa64" ]; then
+            echo "installed aqua is not an arm64 binary (PE machine 0x${machine}); the windows/arm64 leg would run emulated amd64 tooling" >&2
+            exit 1
+          fi
+          echo "aqua: native windows/arm64 (PE machine 0x${machine})"
+        else
+          "${tmp}/aqua-installer" -v "${AQUA_VERSION}"
+        fi
         rm -rf "${tmp}"
         echo "${AQUA_ROOT_DIR}/bin" >>"$GITHUB_PATH"
     - name: Authorize the committed aqua policy
@@ -52,3 +92,14 @@ runs:
       # must be allowed — every caller needs this, whatever it runs next.
       shell: bash
       run: aqua policy allow aqua-policy.yaml
+    - name: Authenticate aqua's GitHub API calls
+      # See the github-token input. Via env, never interpolated into the
+      # script; GITHUB_ENV so every later step's aqua (and the shims it links)
+      # sees it — that is where the downloads actually happen, lazily, on
+      # first use. AQUA_GITHUB_TOKEN rather than GITHUB_TOKEN: only aqua reads
+      # it, nothing else in the job inherits a credential it did not ask for.
+      if: inputs.github-token != ''
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.github-token }}
+      run: echo "AQUA_GITHUB_TOKEN=${TOKEN}" >>"$GITHUB_ENV"
