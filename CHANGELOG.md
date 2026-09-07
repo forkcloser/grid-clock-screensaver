@@ -6,7 +6,7 @@ versions [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The release
 pipeline refuses to cut a version that has no section here
 (`scripts/release-notes.sh`).
 
-## [Unreleased]
+## [1.0.0-rc.1] - 2026-09-07
 
 ### Changed
 
