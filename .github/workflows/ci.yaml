@@ -1,6 +1,5 @@
-# DO NOT EDIT MANUALLY.
-# This workflow is generic — no project-specific content — and is destined to
-# become part of the canonical baseline limen distributes.
+# Diverges from limen's canonical ci.yaml: macOS-only matrix, no fuzz job.
+# Keep everything else in sync.
 #
 # Design: minimal GitHub glue around the same tooling every developer runs
 # locally. The only marketplace action is GitHub's own checkout, pinned by
@@ -42,19 +41,9 @@ jobs:
       fail-fast: false
       matrix:
         # Pinned images, not -latest: a runner bump is a reviewed change.
-        #
-        # Trimmed from the canonical matrix to macOS alone, and not as an
-        # economy: the product IS a macOS screensaver bundle. `just test` builds
-        # it with xcodebuild and loads the result into a host process — there is
-        # nothing for a linux or windows leg to do but fail. macOS also happens
-        # to be the portability floor the shared recipes target (/bin/bash 3.2),
-        # so the one leg we keep is the strict one.
-        #
-        # arm64 only, and this is complete rather than a gap: darwin/amd64 is
-        # not a supported platform anywhere in the organization (the canonical
-        # aqua.yaml's supported_envs does not list it), and the bundle this
-        # repository ships is arm64-only to match. There is no x86_64 slice for
-        # an Intel leg to test.
+        # macOS only: `just test` needs xcodebuild and loads the bundle into a
+        # host process. arm64 only: the bundle has no x86_64 slice (darwin/amd64
+        # is unsupported org-wide).
         os: [macos-15]
     runs-on: ${{ matrix.os }}
     # Generous: xcodebuild dominates, and the macOS runners are not fast.

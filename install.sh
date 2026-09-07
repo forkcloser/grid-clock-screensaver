@@ -1,37 +1,11 @@
 #!/usr/bin/env bash
 # Grid Clock installer.
 #
-# Downloads a published release, PROVES it is the one this project's CI built,
-# and installs it into your screensaver directory.
-#
 #   curl -fsSL https://raw.githubusercontent.com/forkcloser/grid-clock-screensaver/main/install.sh | bash
 #
-# Why this script exists, and why it is not just a `cp`:
-#
-# The bundle is ad-hoc signed — there is no Apple Developer ID behind it. That
-# is enough for macOS to LOAD it (legacyScreenSaver carries
-# com.apple.security.cs.disable-library-validation), but not enough for
-# Gatekeeper to let it run once it arrives from the internet carrying a
-# quarantine attribute. Clearing that attribute is what makes a downloaded
-# .saver usable, and telling you to run `xattr -dr` on an unverified download
-# would be asking you to switch off a protection on faith.
-#
-# So this script establishes the trust first, and only then clears quarantine:
-#
-#   1. cosign verifies checksums.txt against the SIGNATURE the release workflow
-#      produced. That signature is keyless — its identity IS
-#      forkcloser/grid-clock-screensaver's release.yaml at a v* tag, certified by
-#      Fulcio and logged in Rekor. No key exists to be stolen or misused, and a
-#      file signed by anything else fails this step.
-#   2. The bundle's SHA-256 is checked against that now-trusted checksums file.
-#   3. Only then is the archive expanded, de-quarantined, and installed — and
-#      the bundle's own code signature is re-verified afterwards, so a zip that
-#      damaged it in transit is caught rather than installed.
-#
-# Step 1 needs cosign (https://github.com/sigstore/cosign). Without it the
-# script stops rather than quietly downgrading to "checksum only", because a
-# checksums file you cannot authenticate proves nothing about who made it.
-# --allow-unverified opts into that downgrade explicitly, and says so loudly.
+# cosign verification comes before de-quarantine, and the script stops rather
+# than downgrade to checksum-only; --allow-unverified opts in. Why: readme.md,
+# "From a release".
 
 set -euo pipefail
 
@@ -94,8 +68,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(uname -s)" = "Darwin" ] || die "this is a macOS screensaver; uname says $(uname -s)"
-# arm64 only: the bundle carries no x86_64 slice, and darwin/amd64 is not a
-# supported platform. Fail here rather than after the download.
+# Fail before the download: the bundle has no x86_64 slice.
 [ "$(uname -m)" = "arm64" ] || die "this build is for Apple silicon (arm64) only; uname says $(uname -m)"
 
 major=$(sw_vers -productVersion | cut -d. -f1)
@@ -109,9 +82,8 @@ done
 
 if [ -z "$version" ]; then
     echo "resolving the latest release..."
-    # No jq dependency: pull tag_name out of the API response directly. The
-    # release workflow marks prerelease tags as prereleases, so /latest never
-    # returns a test tag.
+    # The release workflow publishes prerelease-suffixed tags as prereleases, so
+    # /latest never returns a test tag.
     version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
         | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
         | head -1)
@@ -174,9 +146,6 @@ echo "expanding..."
 ditto -x -k "$workdir/$archive" "$workdir/extracted"
 [ -d "$workdir/extracted/$SAVER" ] || die "the archive did not contain $SAVER"
 
-# The whole point of the verification above: now that we know exactly what this
-# is, clearing the download quarantine is an informed decision rather than a
-# leap of faith.
 xattr -dr com.apple.quarantine "$workdir/extracted/$SAVER" 2> /dev/null || true
 
 # A transfer that damaged the bundle would show up here rather than as a
