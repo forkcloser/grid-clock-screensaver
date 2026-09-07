@@ -5,11 +5,9 @@
 # Go tests live in their own submodule: `just do test go` runs the unit tests,
 # `just do test go <recipe>` (e.g. `just do test go race`) runs one task.
 #
-# Bare `just do test` deliberately refuses: tests are always language-bound, so
-# there is nothing a universal default could run that would not fail (or lie)
-# on some repo. Which suites apply is each project's call — name one
-# explicitly, and define the project-wide aggregate as `test` in
-# the root Justfile (the CI workflow's entry point, mirroring `lint`).
+# Bare `just do test` refuses: tests are language-bound, so any universal
+# default would fail or lie somewhere. Name a suite, and define the project
+# aggregate as `test` in the root Justfile (what CI runs).
 default:
     @echo 'just test has no default — name a suite (e.g. `just do test go`), or run the project'"'"'s `just test`.' >&2
     @exit 1

@@ -1,6 +1,7 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
+    "github>farcloser/limen#v0.2.1",
     "config:recommended",
     "github>aquaproj/aqua-renovate-config#2.13.0",
   ],

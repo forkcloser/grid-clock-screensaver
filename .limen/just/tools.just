@@ -13,6 +13,9 @@ import 'lib.just'
 # --- Project tooling via aqua (see book/tooling.md). Each recipe takes the
 #     owner/repo exactly as it appears in aqua.yaml, e.g. golangci/golangci-lint. ---
 #
+# The Go-source analyzers are go.mod `tool` directives, not aqua packages
+# (book/tooling.md).
+#
 # The mutating recipes end with a FULL `aqua install`, never `--only-link`:
 # links verify nothing (lazy pulls are a CI economy — wrong at the moment a
 # pin changes), and for checksum-less package types (go_install) the
@@ -25,11 +28,9 @@ import 'lib.just'
 add pkg: (_banner "tools" "add")
     #!/usr/bin/env bash
     set -euo pipefail
-    # Regex-escape the package name before it enters a grep -E / sed -E pattern.
-    # aqua slugs carry dots (github.com, golang.org), and an unescaped '.' is a
-    # wildcard: without this, `add foo/li.r` would match an existing `foo/liar`
-    # (and set/remove would edit/delete the wrong entry). ']' and '\' are omitted
-    # from the class — a Go module slug can contain neither, and both trip BSD sed.
+    # Regex-escape the slug: aqua slugs carry dots, and an unescaped '.' would
+    # match a sibling (`foo/li.r` vs `foo/liar`). ']' and '\' are absent from
+    # slugs and trip BSD sed.
     esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
     if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" aqua.yaml; then
         echo "{{ pkg }} is already in aqua.yaml — use 'just do tools update {{ pkg }}' or 'just do tools set {{ pkg }} <version>'." >&2
@@ -43,15 +44,14 @@ add pkg: (_banner "tools" "add")
 set pkg version: (_banner "tools" "set")
     #!/usr/bin/env bash
     set -euo pipefail
-    # Regex-escape the slug before grep -E / sed -E — see `add` for why.
+    # See `add` for the escaping.
     esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
     if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}@" aqua.yaml; then
         echo "{{ pkg }} is not pinned in aqua.yaml — add it with 'just do tools add {{ pkg }}'." >&2
         exit 1
     fi
-    # An explicit path template: macOS mktemp ignores $TMPDIR and falls back to
-    # a per-user temp dir that sandboxes may deny writes to. A sibling file also
-    # makes the mv a same-filesystem, truly atomic rename.
+    # Explicit sibling template: macOS mktemp ignores $TMPDIR, and a sibling
+    # makes the mv an atomic same-filesystem rename.
     tmp=$(mktemp aqua.yaml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
     sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc})@[^[:space:]]*#\1@{{ version }}#" aqua.yaml > "$tmp"
@@ -60,11 +60,8 @@ set pkg version: (_banner "tools" "set")
     aqua install                      # REAL install: a bad pin fails here, not at first use
 
 # Update an existing tool to its latest version, e.g. `just do tools update golangci-lint`.
-# Takes the COMMAND name (the executable you type — `just`, `limen`), not the
-# owner/name package slug: it delegates to `aqua update`, which resolves a
-# command to its pinned package — local-registry packages included. (The
-# previous `aqua generate` approach could not work: generate refuses to
-# re-emit an already-pinned package, which is the only kind update meets.)
+# Takes the COMMAND name (`just`, `limen`), not the package slug: `aqua update`
+# resolves a command to its pinned package, local registry included.
 update command: (_banner "tools" "update")
     #!/usr/bin/env bash
     set -euo pipefail
@@ -85,20 +82,20 @@ remove pkg: (_banner "tools" "remove")
     # See `set` for why mktemp gets an explicit sibling-path template.
     tmp=$(mktemp aqua.yaml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
-    # Match by an EXACT string compare on the parsed slug, not a regex built from
-    # it. A regex would make a dot in the name a wildcard (see `add`) and delete a
-    # sibling — and escaping for awk is unportable (its -v processing eats the
-    # backslashes), so we parse the slug out and compare literally instead. Drops
-    # the entry's line plus its indented continuation lines (registry:, etc.).
+    # Exact string compare on the parsed slug, not a regex (a dot would be a
+    # wildcard, and escaping for awk is unportable: -v eats backslashes). The
+    # entry's extent is decided by indentation, as YAML decides it: deeper lines
+    # belong to it, a line at its own depth or shallower ends it — so a
+    # `# --- section ---` header at item depth stays with what follows.
     awk -v pkg="{{ pkg }}" '
-        function isCont(l) { return (l ~ /^[[:blank:]]+[^[:blank:]#-]/) }
+        function indent(l) { match(l, /^[[:blank:]]*/); return RLENGTH }
         {
-            if (skip) { if (isCont($0)) next; skip = 0 }
+            if (skip) { if ($0 !~ /^[[:blank:]]*$/ && indent($0) > depth) next; skip = 0 }
             if (match($0, /^[[:blank:]]*-[[:blank:]]*name:[[:blank:]]*/)) {
                 slug = substr($0, RLENGTH + 1)
                 sub(/[[:blank:]].*$/, "", slug)   # drop trailing spaces / comment
                 sub(/@.*$/, "", slug)             # drop @version
-                if (slug == pkg) { skip = 1; next }
+                if (slug == pkg) { skip = 1; depth = indent($0); next }
             }
             print
         }

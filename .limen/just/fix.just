@@ -12,10 +12,8 @@ import 'lib.just'
 
 default: limen just yaml aqua
 
-# limen itself: repair what `just do lint limen` reports — rewrite drifted
-# canonical files, create missing mandatory ones, restore aqua pins and
-# regenerate aqua-checksums.json (network, when pins changed). Same LIMEN_BIN
-# override as the lint recipe (see lint.just).
+# Repairs what `just do lint limen` reports; regenerates aqua-checksums.json
+# when pins changed (network). Same LIMEN_BIN override as lint.just.
 limen: (_banner "fix" "limen")
     ${LIMEN_BIN:-limen} fix .
 
@@ -28,13 +26,7 @@ github *args: (_banner "fix" "github")
 just: (_banner "fix" "just")
     #!/usr/bin/env bash
     set -euo pipefail
-    # --cached --others --exclude-standard: tracked *and* new untracked files,
-    # still honoring .gitignore — so a not-yet-staged file is formatted too.
-    # Tracked-but-deleted files are skipped (see `lint just` for the rationale:
-    # enumeration is git's, truth is the working tree's).
-    # Same pathspecs as `lint just`: literals carry their '**/' twins (git
-    # pathspec literals are case-sensitive and do not match across
-    # directories), and the hidden .justfile spelling is covered.
+    # Same enumeration and pathspecs as `lint just`.
     while IFS= read -r -d '' f; do
         [ -f "$f" ] || continue
         just --fmt --justfile "$f"

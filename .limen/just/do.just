@@ -7,10 +7,6 @@ set working-directory := '../..'
 # Silence just's per-line command echo; recipes announce themselves via _banner.
 set quiet
 
-# The `do` namespace holds every shared task, so the top level stays free for
-# a project's own recipes (a project may define its own `just lint`; the
-# shared one is `just do lint`).
-
 # Show the shared tasks.
 default:
     @just --list do

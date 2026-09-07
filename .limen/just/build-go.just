@@ -10,44 +10,22 @@ set quiet
 # Shared private _banner recipe (see lib.just).
 import 'lib.just'
 
-# Ported from the historical Make build system, corrected along the way:
-#   - a "binary" is a DIRECTORY under cmd/ that contains Go sources — a stray
-#     file or docs directory no longer becomes a phantom target;
-#   - version stamping is reproducible: main.version carries `git describe`,
-#     and commit/date come from Go's own VCS embedding (`go version -m`) at
-#     their COMMIT values — never wall-clock build time, which made the same
-#     commit produce different binaries;
-#   - build tags are scoped to these commands, never exported globally where
-#     they would leak into tests and linters;
-#   - static states its preconditions (Linux, CGO) and fails fast instead of
-#     dying with a cryptic linker error;
-#   - a race build exists.
-# Binaries land in build/ (covered by the canonical .gitignore). Projects
-# declare `var version = "dev"` in each main package for the stamp to land.
-# Extra flags: export BUILD_GO_FLAGS from the root Justfile, the home of all
-# project customization (the variable name mirrors the task path), or set it
-# on the invocation for a one-off.
+# Binaries land in build/. Projects declare `var version = "dev"` in each main
+# package for the stamp. Extra flags: export BUILD_GO_FLAGS from the root
+# Justfile, or set it on the invocation.
 #
-# Extra LINKER flags: BUILD_GO_LDFLAGS, same convention. It exists because
-# -ldflags cannot come through BUILD_GO_FLAGS: go takes the LAST occurrence of a
-# repeated flag, and BUILD_GO_FLAGS is appended after the -ldflags these recipes
-# compute, so a project passing its own would silently REPLACE the version stamp
-# and the CGO linkmode rather than add to them. BUILD_GO_LDFLAGS is appended
-# INSIDE the -ldflags string instead, last, so it composes — and, being last,
-# also wins on a genuine conflict (a project overriding -X main.version).
-# Typical use is a second stamp the project needs pinned at link time:
-#     export BUILD_GO_LDFLAGS := '-X main.someImage=' + some_digest_pinned_ref
+# BUILD_GO_LDFLAGS exists because -ldflags cannot ride BUILD_GO_FLAGS: go keeps
+# the LAST -ldflags, so a project's own would replace the version stamp and CGO
+# linkmode. It is appended inside the -ldflags string, last, so it composes and
+# wins a genuine conflict.
 
 # netgo/osusergo force the pure-Go resolver and user lookups. No-ops when
 # CGO_ENABLED=0 (pure Go already); with CGO they keep DNS and user handling
 # out of libc, which is exactly what makes `static` viable on glibc.
 go_tags := 'netgo,osusergo'
 
-# CGO is off unless asked for: per invocation with `CGO_ENABLED=1 just do build
-# go`, or for good with `export GO_CGO := '1'` in the root Justfile, for a project
-# whose product cannot link without it. Every recipe below resolves it through
-# lib.just's `go_cgo`, which documents the precedence and why it is a shell
-# expansion rather than a just variable.
+# CGO is off unless a project exports GO_CGO := '1' (or CGO_ENABLED=1 for one
+# run); resolution in lib.just.
 
 # --- C toolchain hardening — only effective when CGO_ENABLED=1 --------------
 # The canonical hardening set (see the Red Hat compiler-flags guidance),

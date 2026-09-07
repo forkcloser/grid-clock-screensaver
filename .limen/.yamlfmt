@@ -17,21 +17,13 @@ formatter:
   include_document_start: false  # don't force a leading `---` on every file
 
   # --- the defaults worth overriding ---
-  retain_line_breaks_single: true  # collapse runs of blank lines to ONE, but keep
-                                   # intentional single blank lines (readability).
-                                   # Prefer this over retain_line_breaks, which keeps
-                                   # *all* blank lines and barely normalizes anything.
+  retain_line_breaks_single: true  # collapse runs of blank lines to one, keep single ones
 
   scan_folded_as_literal: false    # leave folded (>) scalars folded; don't rewrite to literal (|)
 
   # --- correctness / safety ---
   disallow_anchors: false          # set true ONLY if you want to forbid &anchors/*aliases
-  max_line_length: 0               # 0 = no wrapping. Leave OFF — yamlfmt's wrapping is
-                                   # crude and mangles long values; let humans wrap.
-
-  # --- quoting / strings: leave alone ---
-  # yamlfmt is deliberately light on string normalization. Don't fight it; it won't
-  # aggressively re-quote, which is the safe default for mixed YAML (k8s, CI, etc.)
+  max_line_length: 0               # no wrapping: yamlfmt's wrapping mangles long values
 
 # --- which files to format ---
 # Every pattern below is doublestar syntax (`**/`, `{yaml,yml}` braces), which

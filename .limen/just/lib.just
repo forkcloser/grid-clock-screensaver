@@ -2,48 +2,38 @@
 # This file provides shared tasks common to all projects and managed by limen.
 # Project recipes live in the root Justfile, below the shared-baseline import.
 
-# Uniform per-recipe banner, shared across the lint/fix/tools modules via `import`
-# (a `mod` can't be depended on, and modules don't inherit the parent's recipes).
-# Private → hidden from --list. The module name is passed in because just has no
-# current-module variable; depended on with arguments so it prints identically for
-# plain *and* shebang recipes, which just otherwise echoes inconsistently (plain
-# recipes echo their lines; shebang recipes do not).
+# Per-recipe banner, imported (a `mod` cannot be depended on). Depended on WITH
+# arguments so plain and shebang recipes print it identically.
 _banner mod name:
     @echo "▶ {{ mod }}: {{ name }}"
 
-# go_cgo answers "does THIS project build with cgo?" for every Go recipe —
-# `export CGO_ENABLED="{{ go_cgo }}"` in a shebang body, or as a command prefix in
-# a plain one. Interpolated into build, test and the per-platform analysis legs so
-# they cannot disagree about the nature of the project.
+# go_cgo: "does THIS project build with cgo?", shared by build, test and the
+# per-platform legs.
 #
-# It is a SHELL EXPANSION, not a just value, and that is the entire design: it is
-# evaluated when the recipe runs, where a parent's exports are present. Resolving
-# it at parse time instead — `export CGO_ENABLED := env('CGO_ENABLED', '0')`, how
-# this once read — cannot work: a child module cannot see its parent's variables,
-# and env() reads just's PROCESS environment, which never holds one, so a project's
-# `export GO_CGO := '1'` was silently discarded and 0 re-exported over it.
+# It is a SHELL expansion, not a just value, on purpose: a child module cannot
+# see its parent's variables and env() reads just's process environment, so
+# `export CGO_ENABLED := env('CGO_ENABLED', '0')` here would silently discard a
+# project's GO_CGO.
 #
-# Precedence, in order: an explicit CGO_ENABLED on the invocation wins (including
-# downgrading a cgo project for a one-off pure-Go run), then the project's GO_CGO,
-# then off — because go's own default is cgo ON for native builds wherever a C
-# toolchain happens to exist, which would make the same tree behave differently on
-# two machines.
+# Precedence: CGO_ENABLED on the invocation, then the project's GO_CGO, then
+# off — go's own default is cgo on wherever a C toolchain happens to exist.
 go_cgo := '${CGO_ENABLED:-${GO_CGO:-0}}'
 
-# Run CMD once per supported platform (the list below mirrors the canonical
-# checksum.supported_envs in aqua.yaml) with CGO disabled: the Go build/dependency graph
-# differs per GOOS, so a single native run misses the other platforms' files
-# and dependencies. CGO prevents exactly that — loading packages for a foreign
-# GOOS needs that platform's C toolchain — so a project that genuinely needs
-# cgo declares it (`export GO_CGO := '1'`, or CGO_ENABLED=1 for one invocation)
+# Run CMD once per supported platform — every GOOS/GOARCH pair in the canonical
+# checksum.supported_envs of aqua.yaml (the list below mirrors it; extend them
+# together) — with CGO disabled. The Go build graph is selected by both axes:
+# a file built only on linux is invisible to a darwin run, and a file built
+# only on amd64 (an _amd64.go, an _amd64.s) is invisible to an arm64 one, so a
+# GOOS-only loop at the host's architecture silently skips half the matrix.
+# CGO would prevent exactly this — loading packages for a foreign platform
+# needs that platform's C toolchain — so a project that genuinely needs cgo
+# declares it (`export GO_CGO := '1'`, or CGO_ENABLED=1 for one invocation)
 # and gets one native run only: reduced coverage, announced loudly.
-# The same resolution as the build module, so ONE project knob governs every Go
-# task — analysis and build agree on whether this project is a cgo project.
-_per-goos +cmd:
+_per-platform +cmd:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "{{ go_cgo }}" = "1" ]; then
-        echo "CGO_ENABLED=1: cross-platform runs are impossible (foreign-GOOS package" >&2
+        echo "CGO_ENABLED=1: cross-platform runs are impossible (foreign-platform package" >&2
         echo "loading needs that platform's C toolchain) — native platform only." >&2
         {{ cmd }}
     else
@@ -52,15 +42,14 @@ _per-goos +cmd:
         # set (which is how aqua builds Go tools) — so a cold start must
         # trigger that build on the native leg; the foreign legs then merely
         # run the already-built binary.
-        # Extend this list together with checksum.supported_envs in aqua.yaml.
-        platforms=(darwin linux windows)
-        native="$(go env GOHOSTOS)"
+        platforms=(darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64)
+        native="$(go env GOHOSTOS)/$(go env GOHOSTARCH)"
         ordered=("$native")
-        for goos in "${platforms[@]}"; do
-            [ "$goos" = "$native" ] || ordered+=("$goos")
+        for platform in "${platforms[@]}"; do
+            [ "$platform" = "$native" ] || ordered+=("$platform")
         done
-        for goos in "${ordered[@]}"; do
-            echo "→ GOOS=$goos"
-            CGO_ENABLED=0 GOOS="$goos" {{ cmd }}
+        for platform in "${ordered[@]}"; do
+            echo "→ GOOS=${platform%/*} GOARCH=${platform#*/}"
+            CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}" {{ cmd }}
         done
     fi
