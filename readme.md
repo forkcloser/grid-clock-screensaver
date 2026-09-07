@@ -159,6 +159,19 @@ With Grid Clock selected, **Options…** appears below the preview:
 | Main display only *(default)* | Clock on the main display, other displays black |
 | All displays | Clock on every display |
 
+### Known limitation: displays stacked above or below the main one
+
+On macOS 14 and later the screensaver host (`legacyScreenSaver`) hands a display
+arranged *above or below* the main display a window whose origin is in
+CoreGraphics coordinates (y grows downward) while AppKit reads it as y-up. The
+window lands in empty space, the saver never learns which display it is on, and
+that display shows the system background instead of the clock. Displays arranged
+*side by side* are unaffected, since their origin is y = 0 either way. This is a
+host bug no saver can work around: the window belongs to the host process and
+`setFrame:` is ignored. If a stacked display stays dark, arranging the displays
+side by side in System Settings › Displays is the workaround. First documented by
+[chrstphrknwtn/grid-clock-screensaver#16](https://github.com/chrstphrknwtn/grid-clock-screensaver/pull/16).
+
 ## Uninstall
 
 ```sh
