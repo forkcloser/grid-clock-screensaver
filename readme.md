@@ -38,21 +38,29 @@ API, but macOS 14 is exactly where upstream broke, so on macOS 13 and earlier
 you may as well run [the original](https://github.com/chrstphrknwtn/grid-clock-screensaver),
 which works fine there.
 
-Building needs Xcode. Verified on macOS 26.6 (Tahoe) with Xcode 26.6; 14 and 15
-are declared but untested.
+Building needs Xcode. Verified by hand on macOS 26.6 (Tahoe) with Xcode 26.6.
+macOS 15 is exercised by CI on every push — the `macos-15` runner builds the
+bundle, loads it and renders a frame (`just test`) — but has not been checked
+inside the real screensaver host. macOS 14 is declared but untested.
 
 ## Install
 
 ### From a release
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/forkcloser/grid-clock-screensaver/main/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
 ```
 
 The script downloads the latest release, verifies it, installs it into
 `~/Library/Screen Savers`, and tells you where to find it in System Settings.
-`--system` installs for all users, `--version vX.Y.Z` pins a release, and
+`--system` installs for all users, `--version X.Y.Z` pins a release, and
 `--help` lists the rest.
+
+That URL is the installer *attached to the latest release* — not the copy on
+`main`, which can be newer than any release and once disagreed with one about
+the archive's name. It does not guess the name at all: it reads it from the
+release's signed `checksums.txt`, so pinning an older release with `--version`
+works too.
 
 **What "verifies" means, and why it matters here.** The bundle is ad-hoc signed
 — there is no Apple Developer ID behind it. That is enough for macOS to *load*
@@ -82,7 +90,11 @@ falling back to "checksum only", since a checksums file you cannot
 authenticate proves nothing about who wrote it. `--allow-unverified` opts into
 that downgrade explicitly.
 
-To verify by hand instead:
+The one thing the script cannot verify for you is itself: you run it before it
+has checked anything. It *is* covered — `install.sh` is a release asset listed
+in `checksums.txt`, signed with the rest — so if piping a URL into `bash` is
+more trust than you want to extend, download the assets and check them by hand,
+the installer included, before running it:
 
 ```sh
 cosign verify-blob --bundle checksums.txt.sigstore.json \
@@ -90,6 +102,7 @@ cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-identity-regexp \
     'https://github.com/forkcloser/grid-clock-screensaver/\.github/workflows/release\.yaml@refs/tags/v.*' \
   checksums.txt
+shasum -a 256 -c checksums.txt   # the archive and install.sh, both
 ```
 
 ### From source
@@ -107,7 +120,9 @@ screensaver list once at launch).
 
 `just install` builds and copies into `~/Library/Screen Savers`, which installs
 for your user only. `just build` stops after the build; the bundle lands in
-`build/Build/Products/Release/`. Without `just`, the same build is:
+`build/Build/Products/Release/`. A bundle built this way says it is version
+`0.0.0` — only the release passes a real one (`just build Release 1.2.3`), so an
+unversioned build is recognisable as one. Without `just`, the same build is:
 
 ```sh
 xcodebuild -project 'Grid Clock.xcodeproj' -scheme 'Grid Clock' \
@@ -118,7 +133,7 @@ xcodebuild -project 'Grid Clock.xcodeproj' -scheme 'Grid Clock' \
 `-destination 'generic/platform=macOS'` keeps the build independent of the host
 machine. The bundle is arm64 only — Intel Macs are not a supported platform.
 
-### 3. Select it
+### Select it
 
 **macOS 26 (Tahoe)** folded Screen Saver into the Wallpaper pane — there is no
 longer a Screen Saver item in the System Settings sidebar:
@@ -143,6 +158,20 @@ With Grid Clock selected, **Options…** appears below the preview:
 | --- | --- |
 | Main display only *(default)* | Clock on the main display, other displays black |
 | All displays | Clock on every display |
+| Brightness *(default 100 %)* | Dims lit and unlit letters together toward black, 5–100 %; the preview follows the slider, Cancel restores |
+
+### Known limitation: displays stacked above or below the main one
+
+On macOS 14 and later the screensaver host (`legacyScreenSaver`) hands a display
+arranged *above or below* the main display a window whose origin is in
+CoreGraphics coordinates (y grows downward) while AppKit reads it as y-up. The
+window lands in empty space, the saver never learns which display it is on, and
+that display shows the system background instead of the clock. Displays arranged
+*side by side* are unaffected, since their origin is y = 0 either way. This is a
+host bug no saver can work around: the window belongs to the host process and
+`setFrame:` is ignored. If a stacked display stays dark, arranging the displays
+side by side in System Settings › Displays is the workaround. First documented by
+[chrstphrknwtn/grid-clock-screensaver#16](https://github.com/chrstphrknwtn/grid-clock-screensaver/pull/16).
 
 ## Uninstall
 
@@ -154,12 +183,14 @@ rm -rf ~/Library/'Screen Savers'/'Grid Clock.saver'
 Preferences are stored per-host and are left behind. To clear them too:
 
 ```sh
-defaults -currentHost delete com.chrstphrknwtn.grid-clock
-rm -f ~/Library/Preferences/ByHost/com.chrstphrknwtn.grid-clock.*.plist
+defaults -currentHost delete world.farcloser.grid-clock
+rm -f ~/Library/Preferences/ByHost/world.farcloser.grid-clock.*.plist
 ```
 
 The second line is not redundant — `defaults delete` empties the file but leaves
-it on disk.
+it on disk. Releases before 1.0 (and upstream's 0.0.5) stored their settings
+under `com.chrstphrknwtn.grid-clock`; the first launch of 1.0 copies the display
+setting from there, so the old domain can be cleared the same way afterwards.
 
 ## How it works
 
@@ -177,8 +208,12 @@ scales cleanly from the System Settings thumbnail up to a 6K display.
 
 ## Differences from upstream
 
-Behaviour is otherwise identical to 0.0.5.
+Behaviour is otherwise identical to 0.0.5, with one addition.
 
+- **Brightness option.** 5–100 %, scaling every letter toward the black
+  background. The idea is from
+  [chrstphrknwtn/grid-clock-screensaver#16](https://github.com/chrstphrknwtn/grid-clock-screensaver/pull/16),
+  done there as CSS opacity; here it is a multiplier on the two grey levels.
 - **Font sizing.** Upstream sized type in viewport units and carried a media
   query specifically to stop the System Settings thumbnail from breaking.
   Sizing off the cell handles that case, so both are gone.
@@ -216,14 +251,25 @@ the system toolchain, because aqua cannot pin them. Everything else — `just`,
 what the clock says for all 1440 minutes of the day against `test/golden.txt`,
 which was generated from upstream 0.0.5's own `Webview/index.js` — see
 `test/regenerate-golden.js`, which reads that file straight out of git history.
-`just test-bundle` builds the `.saver`, loads it the way the screensaver host
-does (`NSBundle` → `principalClass`), renders a frame offscreen, and checks it
-looks like a lit grid on black.
+`just test-runtime` checks what parity cannot: that a system time-zone change
+is read at the next minute, and that the saver's timer sleeps between
+transitions instead of spinning at 30 Hz. `just test-bundle` builds the
+`.saver`, loads it the way the screensaver host does (`NSBundle` →
+`principalClass`), renders a frame offscreen, and checks it looks like a lit
+grid on black. `just verify-bundle` asserts what the built bundle *is*: the
+version it claims, the bundle identifier, arm64 only, macOS 14.0 minimum, and
+an intact ad-hoc signature with the hardened runtime — the same gate the
+release runs before packaging.
 
 **Releases** are cut with `just do release vX.Y.Z`: it verifies a clean tree,
 creates a *signed* tag, and pushes it. The tag push is the release button — the
-workflow builds on a macOS runner, signs `checksums.txt` with keyless cosign,
-and publishes the GitHub release.
+workflow builds on a macOS runner through the same `build` recipe with the tag
+as the bundle's version, runs `verify-bundle`, signs `checksums.txt` with
+keyless cosign, and publishes the GitHub release. The release notes are
+written by hand in [`CHANGELOG.md`](./CHANGELOG.md) beforehand; a version
+without its section there does not release. Pushing `v*` tags is restricted by
+a repository ruleset, so the person running the command must be one it lets
+through.
 
 ## Licensing
 
@@ -255,7 +301,11 @@ So, to be exact about what the MIT grant here does and does not cover:
 We are not claiming rights we do not hold. If you need certainty about the
 upstream portion, the answer has to come from upstream. If you are Christopher
 Newton and would like this fork changed — relicensed, attributed differently,
-or taken down — open an issue and it will be done.
+or taken down — say so on
+[chrstphrknwtn/grid-clock-screensaver#13](https://github.com/chrstphrknwtn/grid-clock-screensaver/issues/13),
+the thread this fork opened with you for exactly that conversation, and it will
+be done. (This repository's own issue tracker is off; security reports go
+through [private vulnerability reporting](https://github.com/forkcloser/grid-clock-screensaver/security/advisories/new).)
 
 ## Related
 
