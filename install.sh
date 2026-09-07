@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Grid Clock installer.
 #
-#   curl -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
+#   curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
 #
 # That URL is this script as attached to the latest release, listed in its
 # checksums.txt: the one signed file it cannot verify for you before it runs
@@ -84,11 +84,18 @@ for tool in curl ditto shasum xattr codesign; do
     command -v "$tool" > /dev/null 2>&1 || die "required tool not found: $tool"
 done
 
+# Every download: https only (no redirect may downgrade), TLS 1.2 floor, fail
+# on HTTP errors, retry transient failures — the same curl shape the org's
+# CI uses.
+fetch() {
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-delay 3 --retry-all-errors "$@"
+}
+
 if [ -z "$version" ]; then
     echo "resolving the latest release..."
     # The release workflow publishes prerelease-suffixed tags as prereleases, so
     # /latest never returns a test tag.
-    version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+    version=$(fetch "https://api.github.com/repos/${REPO}/releases/latest" \
         | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
         | head -1)
     [ -n "$version" ] || die "could not determine the latest release — pass --version explicitly"
@@ -111,7 +118,7 @@ workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 
 echo "fetching the manifest for ${version}..."
-curl -fsSL -o "$workdir/checksums.txt" "$base/checksums.txt" \
+fetch -o "$workdir/checksums.txt" "$base/checksums.txt" \
     || die "could not download checksums.txt — does release $version exist?"
 
 if [ -n "$allow_unverified" ]; then
@@ -120,7 +127,7 @@ if [ -n "$allow_unverified" ]; then
     echo "         A tampered release would pass this run. You are trusting the network." >&2
     echo
 elif command -v cosign > /dev/null 2>&1; then
-    curl -fsSL -o "$workdir/checksums.txt.sigstore.json" "$base/checksums.txt.sigstore.json" \
+    fetch -o "$workdir/checksums.txt.sigstore.json" "$base/checksums.txt.sigstore.json" \
         || die "could not download the signature (checksums.txt.sigstore.json)"
     echo "verifying the signature..."
     cosign verify-blob \
@@ -153,7 +160,7 @@ done
 $(cat "$workdir/checksums.txt")"
 
 echo "downloading ${archive}..."
-curl -fsSL -o "$workdir/$archive" "$base/$archive" \
+fetch -o "$workdir/$archive" "$base/$archive" \
     || die "could not download $archive"
 
 echo "verifying the checksum..."
