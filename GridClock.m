@@ -74,6 +74,8 @@ static const struct { uint16_t offset, length; } kWords[GCWordCount] = {
 // Matches the CSS the web version used: #222 unlit, #fff lit, 400ms crossfade.
 static const CGFloat kUnlitLevel      = 0x22 / 255.0;
 static const CGFloat kTransition      = 0.4;
+static const NSTimeInterval kFrameInterval = 1.0 / 30.0;  // during the crossfade only
+static const NSTimeInterval kWakeSlack     = 0.05;        // arm a hair past the boundary, never before it
 static const CGFloat kGridScale       = 0.92;  // fraction of the short edge
 static const CGFloat kFontSizeRatio   = 0.45;  // point size as a fraction of a cell
 
@@ -162,6 +164,19 @@ static void GCComputeLitCells(NSInteger hour24, NSInteger minute, BOOL *lit) {
     }
 }
 
+// The wall-clock hour and minute for `now`, in the zone the system is in right
+// now. NSTimeZone caches the system zone per process; a saver runs for hours
+// and may cross a zone (travel, a DST rule change), so the cache is dropped
+// before every read. Once a minute, this costs nothing.
+static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
+    [NSTimeZone resetSystemTimeZone];
+    NSCalendar *calendar = NSCalendar.currentCalendar;
+    calendar.timeZone = NSTimeZone.systemTimeZone;
+    NSDateComponents *c = [calendar components:(NSCalendarUnitHour | NSCalendarUnitMinute) fromDate:now];
+    *hour = c.hour;
+    *minute = c.minute;
+}
+
 #pragma mark -
 
 @implementation GridClock {
@@ -207,11 +222,11 @@ static void GCComputeLitCells(NSInteger hour24, NSInteger minute, BOOL *lit) {
     self = [super initWithFrame:frame isPreview:isPreview];
     if (!self) return nil;
 
-    self.animationTimeInterval = 1.0 / 30.0;
     _visibleOnThisScreen = YES;
     [self refreshLitCells];
     memcpy(_wasLit, _lit, sizeof(_lit));  // start settled, don't fade in
     _animating = NO;
+    [self armForNextMinute];
 
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(screenParametersChanged:)
@@ -234,6 +249,7 @@ static void GCComputeLitCells(NSInteger hour24, NSInteger minute, BOOL *lit) {
     [self refreshLitCells];
     memcpy(_wasLit, _lit, sizeof(_lit));
     _animating = NO;
+    [self armForNextMinute];
     [self setNeedsDisplay:YES];
 }
 
@@ -244,21 +260,41 @@ static void GCComputeLitCells(NSInteger hour24, NSInteger minute, BOOL *lit) {
         [self refreshLitCells];
         _transitionStart = NSDate.timeIntervalSinceReferenceDate;
         _animating = YES;
+        self.animationTimeInterval = kFrameInterval;
     }
+    // A settled frame is the wake that follows arming (see armForNextMinute),
+    // or a spurious one: nothing to draw, and nothing to re-arm.
     if (!_animating) return;
 
     // Draw this frame first, then settle — so the frame that lands on progress
     // 1.0 is the one that paints the final colours.
     [self setNeedsDisplay:YES];
-    if ([self transitionProgress] >= 1.0) _animating = NO;
+    if ([self transitionProgress] >= 1.0) {
+        _animating = NO;
+        [self armForNextMinute];
+    }
+}
+
+// The saver's timer is the only thing that wakes this process, and between
+// transitions nothing on screen changes. So it runs at 30 Hz for the 400 ms
+// crossfade only; settled, it sleeps until the next minute boundary. Two facts
+// about ScreenSaverView's setter shape this, and test/runtime.m pins both: it
+// takes effect on a running timer, and it fires animateOneFrame once
+// immediately. Hence it is called on state changes only — never from a settled
+// frame, where the echo would re-arm and the timer would spin. A late wake is
+// harmless: the boundary has passed and the transition starts on that frame.
+- (void)armForNextMinute {
+    NSTimeInterval now = NSDate.timeIntervalSinceReferenceDate;
+    NSTimeInterval nextMinute = (floor(now / 60.0) + 1.0) * 60.0;
+    self.animationTimeInterval = MAX(kFrameInterval, nextMinute - now + kWakeSlack);
 }
 
 - (void)refreshLitCells {
     NSDate *now = NSDate.date;
     _minuteIndex = (long long)floor(now.timeIntervalSinceReferenceDate / 60.0);
-    NSDateComponents *c = [NSCalendar.currentCalendar components:(NSCalendarUnitHour | NSCalendarUnitMinute)
-                                                       fromDate:now];
-    GCComputeLitCells(c.hour, c.minute, _lit);
+    NSInteger hour, minute;
+    GCLocalHourMinute(now, &hour, &minute);
+    GCComputeLitCells(hour, minute, _lit);
 }
 
 // Linear progress through the crossfade, eased. smoothstep is a close enough

@@ -12,20 +12,29 @@ project_name: grid-clock
 dist: build/release
 
 # goreleaser cannot drive Xcode (the `prebuilt` builder is Pro-only): the
-# bundle comes from a before-hook, rides in via extra_files, and the build pipe
+# bundle comes from before-hooks, rides in via extra_files, and the build pipe
 # is skipped.
 before:
   hooks:
-    # Twin of the `build` recipe in the root Justfile. A flag change here must
-    # land there too.
-    - xcodebuild -project "Grid Clock.xcodeproj" -scheme "Grid Clock" -configuration Release -destination generic/platform=macOS -derivedDataPath build build
+    # The `build` recipe itself, not a twin of it: the tag becomes the bundle's
+    # version. The project file pins 0.0.0, so a bundle built any other way is
+    # recognisably unversioned.
+    - just build Release {{ .Version }}
+    # Asserts version, bundle identifier, arm64 only, minimum macOS and the
+    # hardened ad-hoc signature. v0.1.0 shipped universal, claiming 1.0.0 (1);
+    # this is the gate that would have caught it.
+    - just verify-bundle {{ .Version }}
+    # Release notes are CHANGELOG.md's section for the version; without one the
+    # release stops. Snapshots read [Unreleased].
+    - scripts/release-notes.sh {{ .Version }} {{ .IsSnapshot }}
     # ditto, not zip: it is the only archiver that preserves a macOS bundle's
     # symlinks, extended attributes, and code signature intact. A `zip -r` copy
     # can arrive with a broken signature, which Gatekeeper then rejects for a
     # reason that has nothing to do with how it was signed.
     - bash -c 'mkdir -p build/assets && rm -f build/assets/*.zip && ditto -c -k --sequesterRsrc --keepParent "build/Build/Products/Release/Grid Clock.saver" "build/assets/grid-clock_{{ .Version }}_arm64.zip"'
     # Ship the installer next to the bundle so it is version-matched and covered
-    # by the same checksums file it verifies against.
+    # by the same checksums file it verifies against. The readme's one-liner
+    # runs THIS copy (releases/latest/download/install.sh), never main's.
     - bash -c 'cp install.sh build/assets/install.sh'
 
 builds:
@@ -72,6 +81,21 @@ release:
   # assets a previous partial attempt already uploaded instead of 422-ing on
   # "already_exists".
   replace_existing_artifacts: true
+  # The body is the hand-written CHANGELOG.md section for this tag (the hook
+  # above proved it exists). goreleaser OSS cannot read a file into the body
+  # (`header.from_file` is Pro-only), so the release links to the section at
+  # the tag, and the install one-liner is repeated where a visitor lands.
+  header: |
+    Release notes: [CHANGELOG.md at {{ .Tag }}](https://github.com/forkcloser/grid-clock-screensaver/blob/{{ .Tag }}/CHANGELOG.md).
 
+    Install (macOS 14+, Apple silicon; verifies the release with cosign first):
+
+    ```sh
+    curl -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/download/{{ .Tag }}/install.sh | bash
+    ```
+
+# No commit list. v0.1.0's auto-generated changelog was every commit in the
+# repository, upstream's 2016–2019 history included; the notes are written by
+# hand in CHANGELOG.md instead, and the header above points at them.
 changelog:
-  sort: asc
+  disable: true
