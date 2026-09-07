@@ -91,7 +91,7 @@ release:
     Install (macOS 14+, Apple silicon; verifies the release with cosign first):
 
     ```sh
-    curl -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/download/{{ .Tag }}/install.sh | bash
+    curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/download/{{ .Tag }}/install.sh | bash
     ```
 
 # No commit list. v0.1.0's auto-generated changelog was every commit in the
