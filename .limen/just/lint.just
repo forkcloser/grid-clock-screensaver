@@ -17,45 +17,28 @@ default: limen just aqua links yaml shell dockerfile commits
 mod go 'lint-go.just'
 mod rust 'lint-rust.just'
 
-# Homebrew formula linting (`just do lint homebrew`): brew's own vendored
-# tooling, resolved by absolute path — the machine-layer exception documented
-# in the module itself. Explicit like the language modules, not in the
-# default set.
+# Explicit, never in the default set: brew is macOS-only and machine-layer
+# (lint-homebrew.just).
 mod homebrew 'lint-homebrew.just'
 
-# limen itself: verify the repository against the Farcloser engineering rules
-# (mandatory files, canonical baseline, license, aqua pins). First in the
-# default set: the other linters trust the canonical files this one verifies.
-# LIMEN_BIN exists for one consumer — the limen repository itself, whose
-# root Justfile points it at `go run ./cmd/limen` so the working tree is judged
-# by its own enforcer, not by the (always older) released pin. Everyone else
-# runs the aqua-pinned binary.
+# First in the default set: the other linters trust the canonical files this
+# one verifies. LIMEN_BIN is for the limen repository itself (`go run
+# ./cmd/limen`, so the tree is judged by its own enforcer).
 limen: (_banner "lint" "limen")
     ${LIMEN_BIN:-limen} check .
 
-# GitHub settings audit — `limen github check` against this repository
-# (inferred from origin), or any target the subcommand takes
-# (`just do lint github -org farcloser`). Named, never in the default set: it
-# needs the network and an authed gh, and its subject is the live GitHub
-# state, not the tree. Same LIMEN_BIN override as `lint limen`.
+# Named, never in the default set: needs the network and an authed gh, and
+# judges live GitHub state, not the tree.
 github *args: (_banner "lint" "github")
     ${LIMEN_BIN:-limen} github check {{ args }}
 
 just: (_banner "lint" "just")
     #!/usr/bin/env bash
     set -euo pipefail
-    # --cached --others --exclude-standard: tracked *and* new untracked files,
-    # still honoring .gitignore — so a not-yet-staged file is linted too. The
-    # index half of that union also lists files deleted from the worktree but
-    # not yet staged (a mid-migration tree, e.g. a renamed canonical module),
-    # so every path is existence-checked before it reaches a tool: enumeration
-    # is git's (ignore semantics), truth is the working tree's. Deleted files
-    # are vacuously well-formatted; guarding required files is `limen check`'s
-    # job, not a formatter's.
-    # Literal names need their '**/' twins — git pathspec literals do not
-    # match across directories (only wildcard patterns like '*.just' do) and
-    # are case-sensitive. All three spellings just honors are covered:
-    # justfile, Justfile, and the hidden .justfile.
+    # --cached --others --exclude-standard: tracked and untracked-but-not-ignored
+    # files. The index half also lists files deleted but unstaged, hence the
+    # existence check. Literal names need their '**/' twins: git pathspec
+    # literals do not match across directories.
     while IFS= read -r -d '' f; do
         [ -f "$f" ] || continue
         just --fmt --check --justfile "$f"
@@ -70,13 +53,9 @@ just: (_banner "lint" "just")
 dockerfile: (_banner "lint" "dockerfile")
     #!/usr/bin/env bash
     set -euo pipefail
-    # --cached --others --exclude-standard: tracked *and* new untracked files,
-    # still honoring .gitignore — so a not-yet-staged Dockerfile is linted too
-    # (same as `lint just`). The patterns cover the naming conventions — the
-    # bare name and the <name>.<variant> / <variant>.<name> forms, at any
-    # depth — for both Dockerfile and its OCI-neutral synonym Containerfile
-    # (podman/buildah). '*.Dockerfile' needs no '**/' twin — a wildcard pattern
-    # already matches across directories; a literal like 'Dockerfile' does not.
+    # Same enumeration as `lint just`, over both Dockerfile and Containerfile
+    # spellings. '*.Dockerfile' needs no '**/' twin: a wildcard already matches
+    # across directories.
     files=()
     while IFS= read -r -d '' f; do
         # Tracked-but-deleted files are skipped (see `lint just`).
@@ -85,9 +64,8 @@ dockerfile: (_banner "lint" "dockerfile")
     done < <(git ls-files -z --cached --others --exclude-standard \
         'Dockerfile' '**/Dockerfile' 'Dockerfile.*' '**/Dockerfile.*' '*.Dockerfile' \
         'Containerfile' '**/Containerfile' 'Containerfile.*' '**/Containerfile.*' '*.Containerfile')
-    # godolint validates RUN instructions through shellcheck when it finds it
-    # on PATH — the hermetic PATH (see the root Justfile) always provides the
-    # pinned one.
+    # godolint runs shellcheck on RUN lines when it finds one on PATH — the
+    # pinned one, here.
     [ ${#files[@]} -eq 0 ] || godolint "${files[@]}"
 
 yaml: (_banner "lint" "yaml")
@@ -112,29 +90,20 @@ shell: (_banner "lint" "shell")
         head -n 1 "$f" 2>/dev/null | grep -qE '^#!.*\b(bash|dash|ksh|sh)\b' && files+=("$f")
     done < <(git ls-files -z --cached --others --exclude-standard)
     [ ${#files[@]} -eq 0 ] || shellcheck --rcfile .limen/.shellcheckrc "${files[@]}"
-    # Shebang recipes inside justfiles are shell scripts too — extract each
-    # body from `just --dump --dump-format json` and shellcheck it standalone.
-    # In the dump a body line is a fragment list: text fragments are strings,
-    # interpolations (double-brace expressions — just syntax, not shell) are
-    # arrays, masked as INTERP. One dump of the root justfile covers the whole
-    # tree: imports (the root Justfile) are flattened into .recipes — they cannot be
-    # parsed standalone, their dependencies may name root-level module paths —
-    # and every `mod` nests recursively under .modules. mktemp gets an explicit
-    # template because macOS mktemp ignores $TMPDIR.
+    # Shebang recipes inside justfiles are shell scripts too: extract each body
+    # from the JSON dump and shellcheck it. Interpolations (just syntax, not
+    # shell) are masked as INTERP. One dump of the root justfile covers imports
+    # and every nested `mod`. mktemp gets an explicit template: macOS ignores
+    # $TMPDIR.
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lint-shell.XXXXXX")
     trap 'rm -rf "$tmpdir"' EXIT
     recipes=()
     dump=$(just --dump --dump-format json)
-    # Bodies are multi-line: base64 carries each across the one-record-per-line
-    # pipe intact (quotes, tabs and all). The trailing tr matters: the native
-    # windows jq writes CRLF, and the stray \r lands in the last TSV field,
-    # corrupting the base64 ("base64: invalid input"). \r cannot legitimately
-    # appear in this stream (recipe names and base64), so a blanket strip is safe.
+    # base64 carries multi-line bodies across the TSV pipe. The trailing tr is
+    # load-bearing: native windows jq writes CRLF and the \r corrupts the base64.
     while IFS=$'\t' read -r name body; do
-        # ':' is illegal in windows filenames — the msys layer creates
-        # "do::lint" via a private-use encoding that native shellcheck then
-        # cannot open (openBinaryFile: invalid argument). The name is only a
-        # label; flatten module separators.
+        # ':' is illegal in windows filenames; the name is only a label, so
+        # module separators are flattened.
         out="$tmpdir/${name//:/_}"
         printf '%s' "$body" | base64 -d > "$out"
         head -n 1 "$out" | grep -qE '^#!.*\b(bash|dash|ksh|sh)\b' || continue
@@ -160,7 +129,6 @@ shell: (_banner "lint" "shell")
 links: (_banner "lint" "links")
     #!/usr/bin/env bash
     set -euo pipefail
-    # A directory input (not a glob) is what makes lychee honor .gitignore/hidden.
     # Canonical exclusions (and their rationale) live in .limen/lychee.toml; a
     # repository adds its own in a root .lychee.toml. Both must be passed
     # explicitly — any --config disables lychee's ./lychee.toml auto-discovery —
@@ -177,14 +145,9 @@ links: (_banner "lint" "links")
 commits range="": (_banner "lint" "commits")
     #!/usr/bin/env bash
     set -euo pipefail
-    # Contributors' SSH keys, when the repo ships them, arm signature display
-    # for humans (git log --show-signature, git tag -v). None of the rules run
-    # below verify signatures — this is convenience wiring, not enforcement.
-    # See https://github.com/andyfeller/gh-ssh-allowed-signers for automation
-    # to retrieve contributor keys.
-    # Best-effort: sandboxed agent sessions (e.g. Claude Code) write-protect
-    # .git/config as an escape-vector guard, and losing the display wiring must
-    # not fail the lint the rules below actually enforce.
+    # .allowed_signers arms signature DISPLAY for humans; none of the rules
+    # below verify signatures. Best-effort: a sandboxed session may
+    # write-protect .git/config, and that must not fail the lint.
     if [ -f .allowed_signers ]; then
         git config --unset-all gpg.ssh.allowedSignersFile 2>/dev/null || true
         git config --add gpg.ssh.allowedSignersFile .allowed_signers 2>/dev/null ||

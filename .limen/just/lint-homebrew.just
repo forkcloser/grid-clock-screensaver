@@ -10,19 +10,10 @@ set quiet
 # Shared private _banner recipe (see lib.just).
 import 'lib.just'
 
-# Homebrew formula linting runs through brew itself: brew vendors its own Ruby
-# and its own RuboCop with the Homebrew cops, so this module needs no Ruby
-# toolchain — installing rubocop separately would be the wrong setup (plain
-# RuboCop does not know the formula audit rules).
-#
-# brew is the one tool here that is NOT on the hermetic PATH, deliberately:
-# it is a machine-layer package manager (not aqua-pinnable), and the PATH
-# exclusion exists to stop machine tools substituting for pinned ones — brew
-# is not substituting for anything, it IS the subject under test; formulas
-# only mean anything on a machine that has it. The exception stays narrow:
-# BREW_BIN is captured from the AMBIENT PATH at just startup (see main.just),
-# before the hermetic PATH locks down — the invoking shell knows where brew
-# lives, whatever the prefix — and the hermetic PATH itself is untouched.
+# brew's own vendored RuboCop and audit rules: no Ruby toolchain, and plain
+# RuboCop would not know the formula cops. brew is not on the hermetic PATH on
+# purpose — it is the subject under test, not a substitute for a pinned tool;
+# BREW_BIN is captured from the ambient PATH in main.just.
 
 default: style audit
 
@@ -33,13 +24,9 @@ style: (_banner "lint homebrew" "style")
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _skip_unless_macos }}
-    # --cached --others --exclude-standard: tracked *and* new untracked files,
-    # still honoring .gitignore (same as `lint just`). The patterns are the
-    # modern tap layout ONLY: Formula/ (sharded subdirectories included) and
-    # Casks/. The legacy layouts brew still reads (HomebrewFormula/, bare *.rb
-    # at the repository root) are deliberately unsupported — a formula living
-    # there is invisible here, so put it in Formula/. Discovery runs before
-    # the brew lookup so a repo without formulas passes vacuously even
+    # Same enumeration as `lint just`, modern tap layout ONLY (Formula/ with
+    # shards, Casks/): a formula in a legacy location is invisible here.
+    # Discovery runs before the brew lookup, so a repo without formulas passes
     # brew-less.
     files=()
     while IFS= read -r -d '' f; do
@@ -56,21 +43,15 @@ style: (_banner "lint homebrew" "style")
     # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical Justfile (main.just).
     "$BREW_BIN" style "${files[@]}"
 
-# The semantic checker: URL/sha256 coherence, license tags, deprecated DSL,
-# dependency ordering. brew addresses formulas by TAP NAME, never by path, so
-# the project must declare which tap it is (export LINT_HOMEBREW_TAP :=
-# 'user/name' in the root Justfile) and this recipe registers the working tree
-# as that tap — a symlink, so the audit judges the working tree, not a clone —
-# for the duration of the run. Extra flags (CI wants --online, which does
-# network calls) go through LINT_HOMEBREW_AUDIT_FLAGS.
+# brew addresses formulas by TAP NAME, never by path: the project declares its
+# tap (export LINT_HOMEBREW_TAP := 'user/name') and the working tree is
+# symlinked in as that tap for the run, so the audit judges this tree, not a
+# clone. Extra flags (CI wants --online) via LINT_HOMEBREW_AUDIT_FLAGS.
 audit: (_banner "lint homebrew" "audit")
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _skip_unless_macos }}
-    # Same vacuous pass as `style`: no formulas, nothing to audit, no brew
-    # (and no tap declaration) required. Tracked-but-deleted files are skipped
-    # (see lint.just's `just` recipe), so a tree whose only formulas are
-    # unstaged deletions passes vacuously too.
+    # Same vacuous pass as `style`.
     present=""
     while IFS= read -r -d '' f; do
         [ -f "$f" ] && present=1 && break
@@ -117,11 +98,9 @@ audit: (_banner "lint homebrew" "audit")
     # shellcheck disable=SC2086 # deliberate word-split of the flags knob.
     "$BREW_BIN" audit --strict --tap "$tap" ${LINT_HOMEBREW_AUDIT_FLAGS:-}
 
-# Homebrew exists on macOS only: everywhere else these recipes degrade to a
-# LOUD no-op, so a repository can keep homebrew in its lint/fix aggregates
-# and still run the full suite on the linux/windows legs of the matrix.
-# Injected into recipe bodies as a just variable (same mechanism as
-# _require_brew below); the twin lives in fix-homebrew.just.
+# macOS only; elsewhere a LOUD no-op so aggregates keep the module on every
+# leg. Injected as a just variable: module recipes cannot share shell
+# functions. Twin in fix-homebrew.just.
 [private]
 _skip_unless_macos := '''
     if [ "$(uname -s)" != 'Darwin' ]; then
@@ -130,10 +109,7 @@ _skip_unless_macos := '''
     fi
 '''
 
-# BREW_BIN is captured from the ambient PATH in main.just (see the module
-# comment); this only refuses when that capture came up empty. Injected into
-# recipe bodies as a just variable because module recipes cannot share shell
-# functions.
+# Refuses only when main.just's ambient capture came up empty.
 [private]
 _require_brew := '''
     if [ -z "${BREW_BIN:-}" ]; then

@@ -1,61 +1,24 @@
 # DO NOT EDIT MANUALLY.
-# This workflow is generic — no project-specific content — and is destined to
-# become part of the canonical baseline limen distributes.
+# Generic, no project content. Renovate's other half: on its branches,
+# regenerate aqua-checksums.json (a bumped pin with a stale checksum breaks
+# every install) and, when the branch bumps farcloser/limen, run the branch's
+# own pinned `limen fix` so the canonical files move with the pin. One fix-up
+# commit.
 #
-# The other half of Renovate: the bot bumps versions in aqua.yaml but cannot
-# do the repo-specific follow-up, so without this workflow every version-bump
-# PR would merge half-applied. Two follow-ups, on pushes to Renovate's
-# branches, one fix-up commit:
-#   1. Regenerate aqua-checksums.json with real aqua — a bumped pin with a
-#      stale checksum breaks every install.
-#   2. Converge the limen baseline: when the branch bumps the farcloser/limen
-#      pin, the repo's canonical files must move with it — a repo is coherent
-#      only when the limen that wrote its files is the limen it pins (an old
-#      baseline checked by the new limen is red, and vice versa). The
-#      branch's own pinned limen runs `fix`; on branches bumping anything
-#      else it is a no-op.
+# A WRITE workflow, hardened: `push:` on the branch prefix, never
+# pull_request_target; no credential kept by checkout and no secrets in the
+# update steps' environment; nothing runs through `just` (a write job does not
+# execute recipe code the branch controls); the commit step uses runner tools
+# only, with the token scoped to that step; the branch name reaches the shell
+# via env; no loop, since a default-token commit triggers no workflows.
 #
-# This is a WRITE workflow — the hardening is deliberate:
-#   - `push:` on the branch prefix, never pull_request_target: it runs in the
-#     repo's own context, on branches only writers (the Renovate app) can
-#     create.
-#   - The checkout keeps no credential, and the update steps run with no
-#     secrets in their environment. Neither goes through `just` — the one
-#     sanctioned deviation: a write-capable workflow does not execute recipe
-#     code the branch controls. `aqua update-checksum` only downloads and
-#     hashes declared artifacts; the converge step executes exactly one
-#     binary, the checksum-pinned limen release the branch declares.
-#   - The commit step runs only runner-provided tools (git, jq, base64,
-#     curl) — no branch-pinned binary ever touches the token, which is
-#     scoped to that single step.
-#   - The branch name reaches the shell via env, never template interpolation
-#     (script-injection hygiene).
-#   - No loop: a commit made with the default GITHUB_TOKEN triggers no
-#     further workflows — and the no-change early exit terminates recursion
-#     regardless.
-#
-# The commit is created through the GraphQL createCommitOnBranch mutation,
-# never a local `git commit` + push: GitHub signs the mutation's commits, and
-# the `limen:main` ruleset requires signatures — an unsigned fix-up commit
-# made every aqua-bump PR unmergeable (see the commit step for the full
-# argument). Consequence of the mutation: the commit's author IS the token's
-# identity, always — with the default token that is github-actions[bot],
-# already listed in the canonical renovate.json5's gitIgnoredAuthors.
-#
-# Known trade of the default token: GitHub suppresses workflow runs for
-# commits it pushes, so the PR's CI does not re-run on the checksum commit.
-# To get CI on the final state of Renovate PRs, register a GitHub App —
-# contents:write only, webhook disabled, installed on the org; no infra, it
-# is just an identity — and set the org variable UPDATE_AQUA_CHECKSUM_APP_ID
-# plus the org secret UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY: the workflow
-# then mints a one-hour, this-repo-only token per run, so there is no
-# long-lived broad credential and nothing that expires on a calendar. A
-# fine-grained PAT with contents:write as UPDATE_AQUA_CHECKSUM_TOKEN is the
-# drop-in alternative; the token preference order is App, PAT, default.
-# With an App or PAT the commit is authored as that identity (the mutation
-# offers no override), so it must be added to gitIgnoredAuthors in
-# renovate.json5 — or Renovate treats the branch as human-modified and
-# stops rebasing it.
+# The commit goes through GraphQL createCommitOnBranch because GitHub signs
+# those and the main ruleset requires signatures (see the commit step). Its
+# author is the token's identity: github-actions[bot] by default, or the
+# App/PAT identity when UPDATE_AQUA_CHECKSUM_APP_ID (+ private key secret) or
+# UPDATE_AQUA_CHECKSUM_TOKEN is set — that identity must be in renovate.json5's
+# gitIgnoredAuthors or Renovate stops rebasing. The App is worth it:
+# default-token commits get no CI run.
 name: update-aqua-checksum
 
 on:
@@ -68,10 +31,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Every run step is bash, explicitly: runner-OS shell defaults are a trap
-# (windows defaults to PowerShell), and explicit bash adds `-eo pipefail`.
-# Uniform across all canonical workflows so adding a runner never changes
-# what the steps mean.
+# Explicit bash: windows defaults to PowerShell, and bash brings -eo pipefail.
 defaults:
   run:
     shell: bash
@@ -90,12 +50,10 @@ jobs:
       - name: Install aqua (pinned, checksum-verified)
         uses: ./.github/actions/setup-aqua
         with:
-          # No token for aqua here, by doctrine: this job's token carries
-          # contents:write, and the update steps below run a branch-declared
-          # binary (the branch's limen pin). Unauthenticated API calls are
-          # rate-limited per runner IP; this is one job per Renovate branch,
-          # and a 403 here fails loudly and is rerun — a write token in the
-          # environment of branch-controlled code would not fail loudly.
+          # No token for aqua here: this job's token carries contents:write and
+          # the steps below run a branch-declared binary. A rate-limit 403
+          # fails loudly and is rerun; a write token in branch-controlled code
+          # would not fail loudly.
           github-token: ""
 
       - name: Regenerate aqua-checksums.json
@@ -106,32 +64,28 @@ jobs:
         run: aqua update-checksum --prune
 
       - name: Converge the limen baseline
-        # `aqua exec` resolves the branch's own farcloser/limen pin (checksums
-        # fresh from the step above), downloads it verified, and `limen fix`
-        # rewrites whatever the new baseline moved. A released limen leaves
-        # its own pin alone (it already matches), so this cannot ping-pong.
-        # Skipped in the limen repository itself: there the working tree IS
-        # the next baseline (the recipes run it via LIMEN_BIN), and a released
-        # limen "converging" it would revert in-flight baseline work.
+        # `aqua exec` resolves the branch's own limen pin, verified with the
+        # checksums from the step above. A released limen leaves its own pin
+        # alone, so this cannot ping-pong. Skipped in the limen repository:
+        # there the working tree IS the next baseline.
         if: github.repository != 'farcloser/limen'
         run: aqua exec -- limen fix .
 
       - name: Mint a push token, if the App is configured
-        # Placed after the update steps so those still run with no secrets in
-        # their environment. The minted token lives one hour and is scoped to
-        # this repository only; the long-lived private key exists solely to
-        # mint and never authorizes a push itself. Guarded on the variable so
-        # repos without the App fall through to the token chain below.
+        # After the update steps, so those run with no secrets. One-hour token,
+        # this repository only; the private key only mints.
         if: vars.UPDATE_AQUA_CHECKSUM_APP_ID != ''
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.UPDATE_AQUA_CHECKSUM_APP_ID }}
           private-key: ${{ secrets.UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY }}
-          # Least privilege: the minted token only ever pushes a commit, so scope it
-          # to contents:write rather than inheriting whatever the App installation
-          # happens to hold now or later.
+          # Least privilege, but both: naming any permission scopes the token to
+          # exactly those, and the fix-up carries canonical workflow files whenever
+          # a limen bump changed one. GitHub refuses that commit from a token
+          # without workflows:write ("Resource not accessible by integration").
           permission-contents: write
+          permission-workflows: write
 
       - name: Commit the update through the API, if any
         env:
@@ -139,27 +93,15 @@ jobs:
           TOKEN: ${{ steps.app-token.outputs.token || secrets.UPDATE_AQUA_CHECKSUM_TOKEN || github.token }}
         run: |
           [ -z "$(git status --porcelain)" ] && { echo "checksums and baseline already in sync"; exit 0; }
-          # The commit is made through GraphQL createCommitOnBranch, not a
-          # local `git commit` + push, because commits made through that
-          # mutation are signed by GitHub — and the `limen:main` ruleset
-          # requires signatures on everything landing on the default branch.
-          # A plain git push is unsigned, and one unsigned commit on the
-          # branch made every aqua-bump PR unmergeable: a merge commit would
-          # land it, GitHub disables rebase while signatures are required,
-          # and squash of a bot-authored PR is refused to everyone but the
-          # bot (see limen's book/github.md).
+          # GraphQL createCommitOnBranch, not `git commit` + push: those commits
+          # are GitHub-signed, and the main ruleset requires signatures — an
+          # unsigned fix-up commit made every aqua-bump PR unmergeable
+          # (book/github.md).
           #
-          # Enumerating the whole dirty tree is deliberate, not sloppiness.
-          # The tree is fully accounted for: a fresh checkout, aqua rooted
-          # outside the workspace, and exactly two writers between checkout
-          # and here — update-checksum and the pinned limen's fix. Whatever
-          # is dirty IS the payload. An enumerated path list would be wrong:
-          # the converge step's job is to commit whatever the NEW limen's
-          # baseline says, and a list baked into the older running workflow
-          # cannot know that surface (the updated workflow arrives in the
-          # very commit being built). Nor would a list add safety — the only
-          # writer that could plant a file is limen fix itself, and
-          # .limen/.github would be on any list.
+          # The whole dirty tree, on purpose: exactly two writers ran since
+          # checkout (update-checksum and the pinned limen's fix), and a path
+          # list baked into the older running workflow cannot know the new
+          # baseline's surface.
           #
           # Limit of the mutation, accepted: FileAddition carries no file
           # mode, so an executable bit cannot travel — both writers here
@@ -193,8 +135,12 @@ jobs:
               },
               fileChanges: {additions: $additions, deletions: $deletions}}}}')"
           # GraphQL reports failure in-body over HTTP 200, so success is the
-          # presence of the new commit oid, never the HTTP status.
-          response="$(curl -sS -X POST -H "Authorization: bearer ${TOKEN}" \
+          # presence of the new commit oid, never the HTTP status. No --retry
+          # and no -L, on purpose: this is a mutation guarded by
+          # expectedHeadOid — a retry after a success that timed out on the
+          # way back would fail on the moved head and report a commit that
+          # landed as an error, and a redirect must never replay the POST.
+          response="$(curl --proto '=https' --tlsv1.2 -fsS -X POST -H "Authorization: bearer ${TOKEN}" \
             -d "${payload}" https://api.github.com/graphql)"
           oid="$(jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"${response}")"
           if [ -z "${oid}" ]; then

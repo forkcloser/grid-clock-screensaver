@@ -12,58 +12,33 @@ import 'lib.just'
 
 default: unit
 
-# `go test` runs funnel through gotestsum: same exit semantics, readable live
-# output (its format is gotestsum's own GOTESTSUM_FORMAT knob). -count=1
-# defeats Go's test result cache — a test task must actually test. The shared
-# timeout is project-overridable from the root Justfile, the home of all project
-# customization:
-#     export TEST_GO_TIMEOUT := '20m'
+# `go test` runs through gotestsum (same exit semantics; GOTESTSUM_FORMAT picks
+# the output). -count=1 defeats the result cache. TEST_GO_TIMEOUT overrides the
+# timeout from the root Justfile.
 #
-# A PASSING test's output is not shown by default — neither t.Log nor a direct
-# write to os.Stderr — so adding prints to chase a green-here/red-in-CI failure
-# looks like the prints never ran. Two independent layers suppress it: `go test`
-# discards a passing package's output entirely without -v, and gotestsum (which
-# passes -json, so it always HAS the output) hides it in its default format. To
-# see it:
-#     GOTESTSUM_FORMAT=standard-verbose just do test go
+# A PASSING test's output is hidden twice over (go test drops it without -v;
+# gotestsum's default format hides it), so debug prints look like they never
+# ran. To see them: GOTESTSUM_FORMAT=standard-verbose just do test go
 #
-# Every recipe resolves CGO_ENABLED through lib.just's `go_cgo`, exactly as the
-# build module does, so a project declaring `export GO_CGO := '1'` TESTS the
-# artifact it ships. Left to go's own default this would be silently
-# environment-dependent — cgo is on for a native build only where a C toolchain
-# happens to be installed, so the same tree would test a cgo binary on a machine
-# with Xcode and a pure-Go one without it. `race` is the exception and forces 1
-# unconditionally: the race detector injects runtime/cgo regardless.
+# CGO_ENABLED resolves through lib.just's go_cgo, so a cgo project tests the
+# artifact it ships; `race` forces 1 (the detector injects runtime/cgo).
 
 # Unit tests.
 unit: (_banner "test go" "unit")
     CGO_ENABLED="{{ go_cgo }}" \
         gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
 
-# Unit tests under the race detector. The final link is delegated to the
-# system linker: the race detector injects runtime/cgo into every package, and
-# hardened CGO_CFLAGS (-fstack-protector-strong, -fPIE) make those objects
-# reference libc symbols Go's internal linker cannot resolve on Linux
-# ("relocation target stderr not defined") — see golang/go#52690, #54313,
-# #58619. On macOS with Xcode 15+, ld emits "has malformed LC_DYSYMTAB"
-# warnings for race builds; cosmetic, the binaries are correct (golang/go#61229).
+# Unit tests under the race detector. External linkmode: the detector injects
+# runtime/cgo, and hardened CGO_CFLAGS make those objects reference libc
+# symbols the internal linker cannot resolve on Linux (golang/go#52690,
+# #54313, #58619). macOS ld's "malformed LC_DYSYMTAB" warnings on race builds
+# are cosmetic (golang/go#61229).
 #
-# The detector does not exist everywhere. It is a prebuilt LLVM
-# ThreadSanitizer runtime that Go vendors per platform (runtime/race/*.syso),
-# and LLVM ships none for windows/arm64 among others — so on those hosts
-# `-race` is not a slow option but a missing one, and `go build -race`
-# refuses before compiling a line ("-race is not supported on GOOS/GOARCH").
-# That refusal is the probe: ask the toolchain, rather than keep a platform
-# list that drifts as Go and LLVM add targets. The check is host-level, made
-# before any package is looked at, so probing `unsafe` — a package with no
-# source to compile — costs milliseconds and answers exactly the same as
-# probing the module would. On such a host the recipe
-# says so, loudly, and passes: a red leg would re-report a Go limitation on
-# every push, and a silent green would hide a coverage gap that is real —
-# this leg's race coverage is absent (the other legs' is not: the linux and
-# macos arm64 legs run the detector natively). The skip is keyed to that
-# exact message: any other failure of the probe build is a real one and
-# fails the recipe as before.
+# The detector is a prebuilt runtime Go vendors per platform, absent on
+# windows/arm64 among others. Ask the toolchain rather than keep a platform
+# list: a probe build of `unsafe` answers in milliseconds. Only the exact
+# "-race is not supported" refusal skips — loudly, and passes, since the other
+# legs run the detector natively; any other probe failure is real.
 race: (_banner "test go" "race")
     #!/usr/bin/env bash
     set -euo pipefail
@@ -84,28 +59,23 @@ bench: (_banner "test go" "bench")
     CGO_ENABLED="{{ go_cgo }}" \
         go test -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -run '^$' -bench . -benchmem ./...
 
-# Fuzz smoke: every Fuzz* target in every package, each for a short budget —
-# a regression net, not a campaign. The seed corpus of the target runs first
-# (that is what -run selects), then the engine mutates for TEST_GO_FUZZ_TIME
-# (default 10s; export from the root Justfile to raise it). Driven by
-# `go test -fuzz` itself, never a prebuilt test binary: only the go tool's
-# fuzz build compiles in the coverage counters, and without them the engine
-# mutates blind. `go test -fuzz` accepts one target per invocation, hence the
-# loop; targets are discovered with -list rather than grep so build tags and
-# _test.go placement are Go's call, not a regex's.
+# Every Fuzz* target for a short budget (TEST_GO_FUZZ_TIME, default 10s).
+# Driven by `go test -fuzz`, one target per invocation — only that build
+# compiles in the coverage counters. Targets come from -list, not grep, so
+# build tags stay Go's call.
 #
-# The verdict comes from the crasher, not the exit code. A real finding always
-# writes the failing input under the package's testdata/fuzz/<Target>/ (commit
-# it — it is a regression test from then on). But the coordinator can also
-# exit 1 with "context deadline exceeded" when a worker is mid-iteration as
-# fuzztime expires — a shutdown hiccup, not a finding, and slow targets hit it
-# most. So: exit 1 WITH a new testdata file is a failure; exit 1 without one
-# is retried once, and a second in a row is treated as real. The generated
-# corpus lives under $(go env GOCACHE)/fuzz — cache that between CI runs and
-# fuzzing becomes cumulative. A tree with no fuzz targets says so and passes.
+# The verdict is the crasher, not the exit code: a real finding writes under
+# testdata/fuzz/<Target>/ (commit it); the coordinator can also exit 1 with
+# "context deadline exceeded" as fuzztime expires mid-iteration, so exit 1
+# without a new file is retried once. No Fuzz* targets, or no go.mod at all:
+# says so and passes.
 fuzz: (_banner "test go" "fuzz")
     #!/usr/bin/env bash
     set -euo pipefail
+    if [ ! -f go.mod ]; then
+        echo "no go.mod — not a Go module, nothing to fuzz (skipped, not failed)."
+        exit 0
+    fi
     export CGO_ENABLED="{{ go_cgo }}"
     fuzztime="${TEST_GO_FUZZ_TIME:-10s}"
     # Crasher count for a target: the directory does not exist until the first
@@ -182,12 +152,9 @@ cover: (_banner "test go" "cover")
         echo "coverage ${total}% meets the ${min}% minimum"
     fi
 
-# CPU and memory profiles, one pair per package, with pprof top-20 summaries
-# printed and PNG call graphs rendered via the pinned `dot` (goccy/go-graphviz:
-# real graphviz compiled to WASM, so it lives in aqua like any Go tool).
-# Informational: a package whose tests fail is still profiled past, never
-# fails the run. Artifacts land under build/profiles/ (raw) and
-# build/profiles-docs/ (PNG); analyze interactively with `go tool pprof`.
+# CPU and memory profiles per package, pprof top-20 printed, PNG call graphs
+# via the pinned `dot`. Informational: a failing package is still profiled
+# past. Raw under build/profiles/, PNG under build/profiles-docs/.
 profile: (_banner "test go" "profile")
     #!/usr/bin/env bash
     set -euo pipefail
@@ -209,25 +176,23 @@ profile: (_banner "test go" "profile")
         echo "  -> $png"
     }
     for pkg in $(go list ./...); do
-        # Filename-safe name from the FULL import path, not just the last segment:
-        # example/a/client and example/b/client both end in "client" and would
-        # otherwise overwrite each other's binary and profiles. '/' -> '__'; the
-        # only other char a Go import path carries that matters here is '.', which
-        # is already filename-safe.
-        name=${pkg//\//__}
+        # One directory per package keyed by the FULL import path: flattening
+        # collides (example/a__b vs example/a/b, '_' being legal in import
+        # paths). Paths stay cwd-relative for the WASM dot (see render).
+        mkdir -p "$prof/$pkg" "$docs/$pkg"
         echo "Profiling $pkg..."
-        go test -count=1 -o "$prof/$name.test" "$pkg" \
-            -cpuprofile "$prof/${name}_cpu.prof" \
-            -memprofile "$prof/${name}_mem.prof" || true
-        if [ -s "$prof/${name}_cpu.prof" ]; then
+        go test -count=1 -o "$prof/$pkg/pkg.test" "$pkg" \
+            -cpuprofile "$prof/$pkg/cpu.prof" \
+            -memprofile "$prof/$pkg/mem.prof" || true
+        if [ -s "$prof/$pkg/cpu.prof" ]; then
             echo "  CPU profile (top 20):"
-            go tool pprof -top -nodecount=20 "$prof/${name}_cpu.prof" 2>/dev/null || true
-            render "$prof/${name}_cpu.prof" "$docs/${name}_cpu.png"
+            go tool pprof -top -nodecount=20 "$prof/$pkg/cpu.prof" 2>/dev/null || true
+            render "$prof/$pkg/cpu.prof" "$docs/$pkg/cpu.png"
         fi
-        if [ -s "$prof/${name}_mem.prof" ]; then
+        if [ -s "$prof/$pkg/mem.prof" ]; then
             echo "  Memory profile — alloc_space (top 20):"
-            go tool pprof -top -nodecount=20 -alloc_space "$prof/${name}_mem.prof" 2>/dev/null || true
-            render "$prof/${name}_mem.prof" "$docs/${name}_alloc.png" -alloc_space
+            go tool pprof -top -nodecount=20 -alloc_space "$prof/$pkg/mem.prof" 2>/dev/null || true
+            render "$prof/$pkg/mem.prof" "$docs/$pkg/alloc.png" -alloc_space
         fi
     done
     echo "Profiles written to $prof/, diagrams to $docs/"

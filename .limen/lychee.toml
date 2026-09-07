@@ -4,20 +4,15 @@
 # recipe passes both files and lychee merges them, concatenating the exclude
 # lists — so this baseline only carries exclusions that apply everywhere.
 
-# Traverse dotted directories. lychee skips hidden paths by default, which
-# silently excludes documentation living under `.github/` — invisible in most
-# repositories (their markdown sits at the root or under book/), and total in
-# the org's `.github` repository, where every policy document IS in `.github/`.
-# A link check that quietly covers nothing is worse than no link check. This is
-# independent of .gitignore handling (lychee's separate --no-ignore, which we
-# never pass), so build artifacts stay excluded, and `.git` is not walked.
+# Traverse dotted directories: lychee skips hidden paths by default, which
+# silently drops every document under .github/ — the whole corpus in the org's
+# `.github` repository. Independent of .gitignore handling, so build artifacts
+# stay excluded and .git is not walked.
 hidden = true
 
-# Transient failures (5xx, 408, 429) are retried by lychee, but its defaults
-# (3 retries, 2s minimum wait) span mere seconds — shorter than a typical
-# GitHub 503 blip, so runs failed on weather. Widen the window instead of
-# accepting the codes outright: a server that is STILL erroring after ~a
-# minute of backoff is a finding, not weather.
+# lychee's default retry window spans seconds, shorter than a typical GitHub
+# 503 blip. Widen it rather than accept the codes: a server still erroring
+# after a minute is a finding.
 max_retries = 6
 retry_wait_time = 5
 

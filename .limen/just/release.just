@@ -7,46 +7,27 @@
 # tag as a recipe path). Deliberately no settings and no _lib import here: an
 # import's settings would apply to the whole importing module.
 
-# Release. The default is the CI lane; everything local is opted into with
-# --local (see book/recipes.md):
+# Lanes: `vX.Y.Z` cuts the signed tag and pushes (CI builds, signs keyless,
+# publishes); `--local <key> vX.Y.Z` is the fully local, key-based lane and the
+# sole publisher; `--local --dry-run` is an unsigned snapshot; `--ci` is the
+# workflow half. usage() below and book/recipes.md have the details.
 #
-#   just do release vX.Y.Z
-#       Verify a clean tree, create the signed tag (your key signs the
-#       INTENT), push — the release workflow builds, signs the artifacts
-#       (keyless cosign), and publishes.
-#
-#   just do release --local <cosign-key> vX.Y.Z [--cosign-password-stdin]
-#       The fully local lane: goreleaser + key-based cosign from this machine,
-#       and the SOLE publisher — it pushes the commit but not the tag, so it does
-#       not re-trigger the CI release workflow (goreleaser creates the GitHub
-#       release, and its remote tag, itself). The key path is a mandatory
-#       argument; the passphrase is read from stdin with --cosign-password-stdin —
-#       piped, so it never lands in argv or shell history (`pass show cosign |
-#       just do release … --cosign-password-stdin`) — and prompted on the terminal
-#       when the flag is absent. For private repos (nothing touches Rekor's public
-#       log) — and the escape hatch when CI is down.
-#
-#   just do release --local --dry-run
-#       Unsigned local snapshot into build/release/: no tag, no token, no
-#       publish — and works on a dirty tree, by design.
-#
-#   just do release --ci
-#       The workflow half of the default lane (GitHub Actions only): the
-#       pushed tag triggered us; run goreleaser with keyless signing.
-#
-# Tag pushes are always exactly one tag, never --tags: stray local tags stay
-# local. A tag already on HEAD is reused, so a failed publish retries safely.
-[doc('Release: `vX.Y.Z` tags for CI · `--local <cosign-key> vX.Y.Z` · `--local --dry-run` · `--ci`')]
+# Tag pushes are exactly one tag, never --tags. A signed tag already on HEAD is
+# reused, so a failed publish retries safely.
+[doc('Release: `vX.Y.Z` signed tag (+ CI artifacts when .goreleaser.yaml exists) · `--local <cosign-key> vX.Y.Z` · `--local --dry-run` · `--ci`')]
 release *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Releasing is opt-in, by carrying a goreleaser config (project-owned, like
-    # the root Justfile — limen neither pins nor seeds it). Checked before
-    # anything else: past this point the recipe creates tags and pushes.
-    if [ ! -f .goreleaser.yaml ] && [ ! -f .goreleaser.yml ]; then
-        echo "this project has no .goreleaser.yaml — goreleaser releases are opt-in (see book/recipes.md)." >&2
-        exit 1
-    fi
+    # Artifacts are opt-in by carrying a goreleaser config. Without one the
+    # default lane still releases: the signed tag IS the release (a Go module, a
+    # tap, a configuration). --local and --ci run goreleaser, so they require it.
+    has_goreleaser() { [ -f .goreleaser.yaml ] || [ -f .goreleaser.yml ]; }
+    require_goreleaser() {
+        if ! has_goreleaser; then
+            echo "this project has no .goreleaser.yaml — this lane runs goreleaser (see book/recipes.md); a tag-only release is 'just do release vX.Y.Z'." >&2
+            exit 1
+        fi
+    }
     usage() {
         echo "usage: just do release <tag>                                               # signed tag + push; CI builds, signs (keyless), publishes" >&2
         echo "       just do release --local <cosign-key> <tag> [--cosign-password-stdin] # fully local, key-based cosign" >&2
@@ -95,11 +76,8 @@ release *args:
             git tag -s "$1" -m "$1"
         fi
     }
-    # The DEFAULT (CI) lane's publish trigger: create the signed tag and push it.
-    # Pushing a v* tag is what starts the release workflow — this is the ONE event
-    # that owns publication in the CI lane. The --local lane, by contrast, pushes
-    # only HEAD (never the tag) so it does NOT re-trigger this workflow: exactly
-    # one publisher per release. See the --local lane below.
+    # CI lane: pushing the v* tag is what starts the release workflow — the one
+    # publisher in this lane.
     tag_and_push() {
         ensure_signed_tag "$1"
         git push origin HEAD
@@ -109,6 +87,7 @@ release *args:
     case "${1:-}" in
         --local)
             shift
+            require_goreleaser
             if [ "${1:-}" = "--dry-run" ]; then
                 # Snapshot builds skip signing: no key material needed.
                 exec goreleaser release --snapshot --clean --skip=sign
@@ -161,13 +140,9 @@ release *args:
                 echo "GITHUB_TOKEN is not set — goreleaser needs it to publish the GitHub release." >&2
                 exit 1
             fi
-            # cosign under goreleaser cannot prompt (no tty on its stdin), so the
-            # passphrase is collected here and handed down via COSIGN_PASSWORD.
-            # That env hand-off to the goreleaser→cosign subtree is unavoidable —
-            # cosign has no other non-interactive channel — so the goal here is to
-            # keep the passphrase out of argv/history and out of the caller's own
-            # shell env: read it once, scoped to this run. Empty is legal (an
-            # unencrypted key).
+            # cosign under goreleaser cannot prompt, so the passphrase travels as
+            # COSIGN_PASSWORD: read once here, never through argv. Empty is legal
+            # (unencrypted key).
             if [ -n "$password_from_stdin" ]; then
                 # --cosign-password-stdin: the passphrase is piped in, so `cat`
                 # would echo it in cleartext if stdin were the terminal. Refuse
@@ -190,15 +165,10 @@ release *args:
             fi
             export COSIGN_KEY="$key"
             export COSIGN_PASSWORD="$password"
-            # Sole-publisher discipline: create the signed tag and push the COMMIT,
-            # but NOT the tag. goreleaser publishes the GitHub release itself (it
-            # only needs the tag locally — `validate` checks the working tree, not
-            # the remote — and creates the release, and its remote tag, through the
-            # API). Because no `git push` of a v* tag happens, the release workflow
-            # (on: push tags) never fires, so this machine is the only publisher —
-            # no race with a second, CI-driven GoReleaser. The signed tag stays
-            # local (the local lane is for private repos / a CI-down escape hatch);
-            # the default lane is the one that puts a signed tag on the remote.
+            # Sole publisher: push the commit, never the tag. goreleaser creates the
+            # release and the remote tag through the API, and with no v* tag push
+            # the release workflow never fires alongside it. The signed tag stays
+            # local.
             ensure_signed_tag "$tag"
             git push origin HEAD
             exec goreleaser release --clean
@@ -208,6 +178,7 @@ release *args:
             # and CI checks out exactly that commit), publishing uses the
             # workflow's GITHUB_TOKEN, and signing is keyless — the OIDC
             # identity replaces any key.
+            require_goreleaser
             if [ -z "${GITHUB_ACTIONS:-}" ]; then
                 echo "--ci is the workflow half — locally, 'just do release <tag>' cuts the tag CI releases." >&2
                 exit 1
@@ -255,6 +226,10 @@ release *args:
             require_version_tag "$tag"
             require_clean
             tag_and_push "$tag"
-            echo "tag $tag pushed — the release workflow builds, signs, and publishes from here."
+            if has_goreleaser; then
+                echo "tag $tag pushed — the release workflow builds, signs, and publishes from here."
+            else
+                echo "tag $tag pushed — no .goreleaser.yaml, so the signed tag is the release: nothing to build or publish."
+            fi
             ;;
     esac
