@@ -55,7 +55,7 @@ pipeline refuses to cut a version that has no section here
 
 ### Fixed
 
-- Two pointers at the repository's issue tracker, which is disabled: the
+- Two pointers at the repository's issue tracker, disabled at the time: the
   licensing section now names the upstream thread this fork opened, and the
   installer's verification-failure message names the private reporting channel.
 
