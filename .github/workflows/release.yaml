@@ -1,6 +1,5 @@
-# DO NOT EDIT MANUALLY.
-# This workflow is generic — no project-specific content — and is destined to
-# become part of the canonical baseline limen distributes.
+# Diverges from limen's canonical release.yaml in `runs-on` only. Keep
+# everything else in sync.
 #
 # The workflow half of the CI release lane: `just do release vX.Y.Z` on a
 # laptop verifies the tree, creates the SIGNED tag (a human signs the intent),
@@ -43,11 +42,8 @@ defaults:
 
 jobs:
   release:
-    # macOS, not the canonical ubuntu-24.04: the release artifact is an Xcode
-    # build. goreleaser's before-hook shells out to xcodebuild, which exists
-    # only here. arm64 runner, arm64 bundle: darwin/amd64 is not a supported
-    # platform, and the project's ARCHS says so — the generic/platform=macOS
-    # destination merely keeps the build independent of the host.
+    # macOS, not the canonical ubuntu-24.04: the goreleaser before-hook runs
+    # xcodebuild.
     runs-on: macos-15
     timeout-minutes: 30
     permissions:

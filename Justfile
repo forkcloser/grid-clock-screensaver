@@ -1,13 +1,8 @@
-# This file is the project's own.
-# Add recipes leveraging provided `do` ready-made recipes, or create your own.
-# The import must be kept: it mounts every shared limen task under `just do ...`.
+# This file is the project's own — add recipes below. Keep the import: it
+# mounts every shared limen task under `just do ...`.
 import '.limen/just/main.just'
 
-# This project builds with Xcode, which aqua cannot pin — `xcodebuild` and
-# `clang` come from the system toolchain (the same eyes-open exception
-# book/recipes.md makes for languages whose toolchain lives outside aqua).
-# Everything else these recipes touch is pinned as usual. The floor is macOS 14
-# and an Xcode carrying a macOS SDK; verified on macOS 26.6 with Xcode 26.6.
+# xcodebuild and clang come from the system toolchain — aqua cannot pin Xcode.
 
 XCODE_PROJECT := 'Grid Clock.xcodeproj'
 XCODE_SCHEME := 'Grid Clock'
@@ -18,10 +13,8 @@ lint: do::lint::default
 fix: do::fix::default
 test: test-parity test-bundle
 
-# Build the screensaver bundle. Release by default; `just build Debug` for the
-# debug configuration. arm64 only — darwin/amd64 is not a supported platform
-# anywhere in the organization, and the project's ARCHS says so. The generic
-# macOS destination keeps the build independent of the host machine.
+# -destination generic/platform=macOS keeps the build independent of the host
+# machine. Twin of the goreleaser before-hook — change both.
 [doc('Build the .saver bundle (configuration: Release or Debug)')]
 build configuration='Release':
     #!/usr/bin/env bash
@@ -31,10 +24,9 @@ build configuration='Release':
         -derivedDataPath build build
     echo "built build/Build/Products/{{ configuration }}/{{ SAVER }}"
 
-# The port must say exactly what upstream 0.0.5 said, for all 1440 minutes.
-# GridClock.m is compiled into the harness directly, so what is tested is the
-# shipped source and not a copy of its logic. test/regenerate-golden.js is
-# where the golden file comes from.
+# GridClock.m is compiled into the harness directly: the shipped source is what
+# is tested, not a copy of its logic. test/regenerate-golden.js produces the
+# golden file.
 [doc('Parity test: every minute of the day against upstream 0.0.5')]
 test-parity:
     #!/usr/bin/env bash
@@ -51,9 +43,6 @@ test-parity:
     fi
     echo "parity: 1440/1440 minutes and the letter grid match upstream 0.0.5"
 
-# What a source-level test cannot check: that the artifact we ship is a
-# loadable bundle whose principal class is wired up and actually draws. Depends
-# on the build, so the recipe stands alone.
 [doc('Bundle test: load the built .saver and render a frame')]
 test-bundle configuration='Release': (build configuration)
     #!/usr/bin/env bash
@@ -64,9 +53,8 @@ test-bundle configuration='Release': (build configuration)
         -o build/test/load test/load.m
     build/test/load "build/Build/Products/{{ configuration }}/{{ SAVER }}" build/test/render.png
 
-# Install into this user's screensaver directory. System Settings reads the
-# screensaver list once at launch, so it must be quit (⌘Q) first or the saver
-# will not appear.
+# System Settings reads the screensaver list once at launch: quit it (⌘Q) first
+# or the saver will not appear.
 [doc('Install the built .saver into ~/Library/Screen Savers')]
 install configuration='Release': (build configuration)
     #!/usr/bin/env bash
@@ -77,8 +65,8 @@ install configuration='Release': (build configuration)
     cp -R "build/Build/Products/{{ configuration }}/{{ SAVER }}" "$dest/"
     echo "installed $dest/{{ SAVER }} — quit System Settings (⌘Q) and reopen if it is running"
 
-# Remove the installed saver. Preferences are per-host and are left behind on
-# purpose; the readme documents how to clear them too.
+# Preferences are per-host and are left behind on purpose; the readme documents
+# clearing them.
 [doc('Remove the .saver from ~/Library/Screen Savers')]
 uninstall:
     #!/usr/bin/env bash

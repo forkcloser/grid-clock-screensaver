@@ -2,20 +2,16 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
     "config:recommended",
-    // Default preset: detects owner/repo@ver and go-module packages in aqua.yaml,
-    // updates the standard-registry ref, and bumps aqua_version in CI/devcontainer too.
     "github>aquaproj/aqua-renovate-config#2.13.0",
   ],
-  // Supply-chain cooldown: wait before proposing a bump. Doubles as protection
-  // against the race where a release tag exists but its assets aren't uploaded yet.
+  // Also covers the window where a release tag exists but its assets are not
+  // uploaded yet.
   minimumReleaseAge: "3 days",
-  // `just lint commits` enforces DCO on every PR range, bot commits included.
+  // `just do lint commits` enforces DCO on every PR range, bot commits included.
   commitBody: "Signed-off-by: renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>",
   // The update-aqua-checksum workflow pushes a fix-up commit onto Renovate's
   // branches; without this, Renovate treats the branch as human-modified and
-  // stops rebasing it. Two identities: the org's limen-ci-forkcloser App (the
-  // credential the workflow prefers, so that CI re-runs on the fix-up), and
-  // the default GITHUB_TOKEN it falls back to.
+  // stops rebasing it. Both identities it can push as.
   gitIgnoredAuthors: [
     "317468017+limen-ci-forkcloser[bot]@users.noreply.github.com",
     "41898282+github-actions[bot]@users.noreply.github.com",
