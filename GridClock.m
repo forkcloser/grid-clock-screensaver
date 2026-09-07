@@ -79,7 +79,10 @@ static const NSTimeInterval kWakeSlack     = 0.05;        // arm a hair past the
 static const CGFloat kGridScale       = 0.92;  // fraction of the short edge
 static const CGFloat kFontSizeRatio   = 0.45;  // point size as a fraction of a cell
 
-static NSString * const kModuleName          = @"com.chrstphrknwtn.grid-clock";
+static NSString * const kModuleName          = @"world.farcloser.grid-clock";
+// 0.0.5 and 0.1.0 kept their preferences under upstream's identifier. Read
+// once, on the first launch that finds nothing under ours, never again.
+static NSString * const kLegacyModuleName    = @"com.chrstphrknwtn.grid-clock";
 static NSString * const kDisplayModeKey      = @"displayMode";
 static NSString * const kLegacyDisplayKey    = @"screenDisplayOption";
 
@@ -201,15 +204,24 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         defaults = [ScreenSaverDefaults defaultsForModuleWithName:kModuleName];
-        // 0.0.5 stored 0 = primary, 1 = last focused, 2 = all. "Last focused"
-        // is meaningless now that macOS hosts each display in its own process,
-        // so it collapses into "main display".
         if ([defaults objectForKey:kDisplayModeKey] == nil) {
-            id legacy = [defaults objectForKey:kLegacyDisplayKey];
-            if (legacy != nil) {
-                [defaults setInteger:([legacy integerValue] >= 2 ? GCDisplayModeAllDisplays
-                                                                 : GCDisplayModeMainOnly)
-                              forKey:kDisplayModeKey];
+            // Nothing under our identifier yet: carry the setting over from
+            // upstream's domain. 0.1.0 wrote displayMode there as-is; 0.0.5
+            // wrote screenDisplayOption as 0 = primary, 1 = last focused,
+            // 2 = all — "last focused" is meaningless now that macOS hosts
+            // each display in its own process, so it collapses into "main".
+            ScreenSaverDefaults *legacy =
+                [ScreenSaverDefaults defaultsForModuleWithName:kLegacyModuleName];
+            id mode = [legacy objectForKey:kDisplayModeKey];
+            if (mode == nil) {
+                id option = [legacy objectForKey:kLegacyDisplayKey];
+                if (option != nil) {
+                    mode = @([option integerValue] >= 2 ? GCDisplayModeAllDisplays
+                                                        : GCDisplayModeMainOnly);
+                }
+            }
+            if (mode != nil) {
+                [defaults setInteger:[mode integerValue] forKey:kDisplayModeKey];
                 [defaults synchronize];
             }
         }

@@ -10,13 +10,21 @@ pipeline refuses to cut a version that has no section here
 
 ### Changed
 
+- The bundle identifier is `world.farcloser.grid-clock`, ours. Up to 0.1.0 the saver
+  shipped under upstream's `com.chrstphrknwtn.grid-clock`, which is also the
+  preferences domain: macOS would have treated a future upstream build and this
+  one as the same screensaver, sharing settings. The first launch under the new
+  identifier copies the display setting from the old domain (0.1.0's
+  `displayMode`, or 0.0.5's `screenDisplayOption` mapped as before), so
+  existing installations keep their choice.
 - The installer reads the archive's name from the release's own signed
   `checksums.txt` instead of guessing it, so it can no longer disagree with the
   release it installs — v0.1.0 shipped `grid-clock_0.1.0_universal.zip` while
   the installer on `main` looked for `…_arm64.zip` and failed. It accepts a
   universal archive (v0.1.0) as well as the arm64-only one. `--version` takes
   `1.0.0` as well as `v1.0.0`. The readme's one-liner runs the release's own
-  installer rather than `main`'s.
+  installer rather than `main`'s. Every download pins https and a TLS 1.2
+  floor and retries transient failures.
 - The bundle's version follows the tag: `CFBundleShortVersionString` is the
   release version and `CFBundleVersion` the commit count. The project file pins
   `0.0.0`, so a build made outside `just build <config> <version>` is

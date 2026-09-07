@@ -48,7 +48,7 @@ inside the real screensaver host. macOS 14 is declared but untested.
 ### From a release
 
 ```sh
-curl -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
 ```
 
 The script downloads the latest release, verifies it, installs it into
@@ -169,12 +169,14 @@ rm -rf ~/Library/'Screen Savers'/'Grid Clock.saver'
 Preferences are stored per-host and are left behind. To clear them too:
 
 ```sh
-defaults -currentHost delete com.chrstphrknwtn.grid-clock
-rm -f ~/Library/Preferences/ByHost/com.chrstphrknwtn.grid-clock.*.plist
+defaults -currentHost delete world.farcloser.grid-clock
+rm -f ~/Library/Preferences/ByHost/world.farcloser.grid-clock.*.plist
 ```
 
 The second line is not redundant — `defaults delete` empties the file but leaves
-it on disk.
+it on disk. Releases before 1.0 (and upstream's 0.0.5) stored their settings
+under `com.chrstphrknwtn.grid-clock`; the first launch of 1.0 copies the display
+setting from there, so the old domain can be cleared the same way afterwards.
 
 ## How it works
 
