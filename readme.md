@@ -158,6 +158,7 @@ With Grid Clock selected, **Options…** appears below the preview:
 | --- | --- |
 | Main display only *(default)* | Clock on the main display, other displays black |
 | All displays | Clock on every display |
+| Brightness *(default 100 %)* | Dims lit and unlit letters together toward black, 5–100 %; the preview follows the slider, Cancel restores |
 
 ### Known limitation: displays stacked above or below the main one
 
@@ -207,8 +208,12 @@ scales cleanly from the System Settings thumbnail up to a 6K display.
 
 ## Differences from upstream
 
-Behaviour is otherwise identical to 0.0.5.
+Behaviour is otherwise identical to 0.0.5, with one addition.
 
+- **Brightness option.** 5–100 %, scaling every letter toward the black
+  background. The idea is from
+  [chrstphrknwtn/grid-clock-screensaver#16](https://github.com/chrstphrknwtn/grid-clock-screensaver/pull/16),
+  done there as CSS opacity; here it is a multiplier on the two grey levels.
 - **Font sizing.** Upstream sized type in viewport units and carried a media
   query specifically to stop the System Settings thumbnail from breaking.
   Sizing off the cell handles that case, so both are gone.
