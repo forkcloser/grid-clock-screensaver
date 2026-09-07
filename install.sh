@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Grid Clock installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/forkcloser/grid-clock-screensaver/main/install.sh | bash
+#   curl -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
 #
-# cosign verification comes before de-quarantine, and the script stops rather
-# than downgrade to checksum-only; --allow-unverified opts in. Why: readme.md,
-# "From a release".
+# That URL is this script as attached to the latest release, listed in its
+# checksums.txt: the one signed file it cannot verify for you before it runs
+# (the readme shows the by-hand check). cosign verification comes before
+# de-quarantine, the archive name comes from the verified checksums.txt rather
+# than a guess, and the script stops rather than downgrade to checksum-only;
+# --allow-unverified opts in. Why: readme.md, "From a release".
 
 set -euo pipefail
 
@@ -13,6 +16,7 @@ REPO="forkcloser/grid-clock-screensaver"
 SAVER="Grid Clock.saver"
 CERT_IDENTITY="^https://github.com/${REPO}/\.github/workflows/release\.yaml@refs/tags/v.*$"
 CERT_ISSUER="https://token.actions.githubusercontent.com"
+REPORT_URL="https://github.com/${REPO}/security/advisories/new"
 
 version=""
 prefix="$HOME/Library/Screen Savers"
@@ -22,7 +26,7 @@ usage() {
     cat >&2 <<EOF
 usage: install.sh [options]
 
-  --version <vX.Y.Z>   install this release (default: the latest release)
+  --version <X.Y.Z>    install this release, with or without the v (default: the latest release)
   --prefix <dir>       install here (default: ~/Library/Screen Savers)
   --system             install for all users in /Library/Screen Savers (needs sudo)
   --allow-unverified   proceed without cosign — checksum only, NOT recommended
@@ -68,7 +72,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(uname -s)" = "Darwin" ] || die "this is a macOS screensaver; uname says $(uname -s)"
-# Fail before the download: the bundle has no x86_64 slice.
+# Fail before the download: no release carries an x86_64-only build.
 [ "$(uname -m)" = "arm64" ] || die "this build is for Apple silicon (arm64) only; uname says $(uname -m)"
 
 major=$(sw_vers -productVersion | cut -d. -f1)
@@ -90,24 +94,25 @@ if [ -z "$version" ]; then
     [ -n "$version" ] || die "could not determine the latest release — pass --version explicitly"
 fi
 
+# Tags carry a v; people type either. Normalise, then insist on the shape the
+# release recipe enforces (vX.Y.Z with an optional prerelease suffix).
 case "$version" in
     v*) ;;
-    *) die "version must look like vX.Y.Z (got '$version')" ;;
+    *) version="v$version" ;;
 esac
+printf '%s' "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$' \
+    || die "version must look like X.Y.Z or vX.Y.Z (got '$version')"
 
-# The asset names goreleaser produces are keyed on the version WITHOUT the v.
+# goreleaser keys asset names on the version WITHOUT the v.
 bare="${version#v}"
-archive="grid-clock_${bare}_arm64.zip"
 base="https://github.com/${REPO}/releases/download/${version}"
 
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 
-echo "downloading ${version}..."
-curl -fsSL -o "$workdir/$archive" "$base/$archive" \
-    || die "could not download $archive — does release $version exist?"
+echo "fetching the manifest for ${version}..."
 curl -fsSL -o "$workdir/checksums.txt" "$base/checksums.txt" \
-    || die "could not download checksums.txt"
+    || die "could not download checksums.txt — does release $version exist?"
 
 if [ -n "$allow_unverified" ]; then
     echo
@@ -123,7 +128,7 @@ elif command -v cosign > /dev/null 2>&1; then
         --certificate-oidc-issuer "$CERT_ISSUER" \
         --certificate-identity-regexp "$CERT_IDENTITY" \
         "$workdir/checksums.txt" \
-        || die "SIGNATURE VERIFICATION FAILED — do not install this. Report it at https://github.com/${REPO}/issues"
+        || die "SIGNATURE VERIFICATION FAILED — do not install this. Report it privately at $REPORT_URL"
     echo "signature ok: signed by ${REPO}'s release workflow at a v* tag"
 else
     die "cosign not found, so the release cannot be authenticated.
@@ -133,13 +138,31 @@ proceed on checksum alone — which proves the download is intact, but not
 who produced it."
 fi
 
+# The archive is whichever one the (now trusted) manifest lists for this
+# version. arm64-only preferred; a universal archive (what v0.1.0 shipped)
+# carries an arm64 slice and is accepted. Exact match on the second column —
+# never a pattern, never a guess.
+archive=""
+for candidate in "grid-clock_${bare}_arm64.zip" "grid-clock_${bare}_universal.zip"; do
+    if awk -v a="$candidate" '$2 == a { found = 1 } END { exit !found }' "$workdir/checksums.txt"; then
+        archive="$candidate"
+        break
+    fi
+done
+[ -n "$archive" ] || die "release $version lists no grid-clock_${bare}_arm64.zip or grid-clock_${bare}_universal.zip in checksums.txt:
+$(cat "$workdir/checksums.txt")"
+
+echo "downloading ${archive}..."
+curl -fsSL -o "$workdir/$archive" "$base/$archive" \
+    || die "could not download $archive"
+
 echo "verifying the checksum..."
-expected=$(grep " ${archive}\$" "$workdir/checksums.txt" | awk '{print $1}' | head -1)
-[ -n "$expected" ] || die "$archive is not listed in checksums.txt"
+expected=$(awk -v a="$archive" '$2 == a { print $1; exit }' "$workdir/checksums.txt")
 actual=$(shasum -a 256 "$workdir/$archive" | awk '{print $1}')
 [ "$expected" = "$actual" ] || die "CHECKSUM MISMATCH for $archive
   expected $expected
-  got      $actual"
+  got      $actual
+Do not install this. Report it privately at $REPORT_URL"
 echo "checksum ok"
 
 echo "expanding..."
