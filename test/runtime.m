@@ -50,6 +50,12 @@ int main(void) {
     @autoreleasepool {
         NSApplicationLoad();
 
+        // 0. Brightness clamps to its range; the range never reaches black.
+        CHECK(GCClampedBrightness(0) == kMinBrightness && GCClampedBrightness(-7) == kMinBrightness,
+              "brightness below the floor clamps to %ld%%", (long)kMinBrightness);
+        CHECK(GCClampedBrightness(250) == kMaxBrightness, "brightness above 100 clamps to 100%%");
+        CHECK(GCClampedBrightness(42) == 42, "brightness in range is kept");
+
         // 1. Time zone: three zones with distinct offsets, changed after the
         // process has already read the clock once.
         NSInteger hour, minute;

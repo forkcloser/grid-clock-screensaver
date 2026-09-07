@@ -85,6 +85,17 @@ static NSString * const kModuleName          = @"world.farcloser.grid-clock";
 static NSString * const kLegacyModuleName    = @"com.chrstphrknwtn.grid-clock";
 static NSString * const kDisplayModeKey      = @"displayMode";
 static NSString * const kLegacyDisplayKey    = @"screenDisplayOption";
+static NSString * const kBrightnessKey       = @"brightness";   // percent
+
+// Brightness scales every glyph — lit and unlit alike — toward the black
+// background, so the grid dims as a whole. 5 % keeps it faintly readable;
+// 0 would be a black screen indistinguishable from "not showing here".
+static const NSInteger kMinBrightness = 5;
+static const NSInteger kMaxBrightness = 100;
+
+static NSInteger GCClampedBrightness(NSInteger percent) {
+    return MAX(kMinBrightness, MIN(kMaxBrightness, percent));
+}
 
 typedef NS_ENUM(NSInteger, GCDisplayMode) {
     GCDisplayModeMainOnly = 0,
@@ -195,8 +206,12 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     CGFloat         _advances[kGlyphCount];
     CGFloat         _capHeight;
 
+    CGFloat         _brightness;            // 0.05 … 1.0, applied in drawRect
+
     NSWindow       *_configSheet;
     NSPopUpButton  *_displayModePopUp;
+    NSSlider       *_brightnessSlider;
+    NSInteger       _brightnessBeforeEditing;  // Cancel restores it
 }
 
 + (ScreenSaverDefaults *)defaults {
@@ -225,7 +240,8 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
                 [defaults synchronize];
             }
         }
-        [defaults registerDefaults:@{ kDisplayModeKey: @(GCDisplayModeMainOnly) }];
+        [defaults registerDefaults:@{ kDisplayModeKey: @(GCDisplayModeMainOnly),
+                                      kBrightnessKey:  @(kMaxBrightness) }];
     });
     return defaults;
 }
@@ -235,6 +251,7 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     if (!self) return nil;
 
     _visibleOnThisScreen = YES;
+    _brightness = GCClampedBrightness([GridClock.defaults integerForKey:kBrightnessKey]) / (CGFloat)kMaxBrightness;
     [self refreshLitCells];
     memcpy(_wasLit, _lit, sizeof(_lit));  // start settled, don't fade in
     _animating = NO;
@@ -401,7 +418,7 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
         }
         if (n == 0) continue;
 
-        CGFloat v = kUnlitLevel + (1.0 - kUnlitLevel) * levels[pass];
+        CGFloat v = _brightness * (kUnlitLevel + (1.0 - kUnlitLevel) * levels[pass]);
         [[NSColor colorWithSRGBRed:v green:v blue:v alpha:1.0] setFill];
         CTFontDrawGlyphs((__bridge CTFontRef)_font, glyphs, positions, n, ctx);
     }
@@ -414,24 +431,41 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
 - (NSWindow *)configureSheet {
     if (!_configSheet) [self buildConfigureSheet];
     [_displayModePopUp selectItemAtIndex:[GridClock.defaults integerForKey:kDisplayModeKey]];
+    _brightnessBeforeEditing = GCClampedBrightness([GridClock.defaults integerForKey:kBrightnessKey]);
+    _brightnessSlider.integerValue = _brightnessBeforeEditing;
     return _configSheet;
 }
 
 - (void)buildConfigureSheet {
-    _configSheet = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 380, 124)
+    _configSheet = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 380, 168)
                                                styleMask:NSWindowStyleMaskTitled
                                                  backing:NSBackingStoreBuffered
                                                    defer:YES];
     NSView *content = _configSheet.contentView;
 
     NSTextField *label = [NSTextField labelWithString:@"Show on:"];
-    label.frame = NSMakeRect(20, 74, 70, 20);
+    label.frame = NSMakeRect(20, 118, 70, 20);
     label.alignment = NSTextAlignmentRight;
     [content addSubview:label];
 
-    _displayModePopUp = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(96, 70, 264, 26) pullsDown:NO];
+    _displayModePopUp = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(96, 114, 264, 26) pullsDown:NO];
     [_displayModePopUp addItemsWithTitles:@[ @"Main display only", @"All displays" ]];
     [content addSubview:_displayModePopUp];
+
+    NSTextField *brightnessLabel = [NSTextField labelWithString:@"Brightness:"];
+    brightnessLabel.frame = NSMakeRect(20, 74, 70, 20);
+    brightnessLabel.alignment = NSTextAlignmentRight;
+    [content addSubview:brightnessLabel];
+
+    // Continuous, so the preview behind the sheet dims while dragging.
+    _brightnessSlider = [NSSlider sliderWithValue:kMaxBrightness
+                                         minValue:kMinBrightness
+                                         maxValue:kMaxBrightness
+                                           target:self
+                                           action:@selector(brightnessChanged:)];
+    _brightnessSlider.frame = NSMakeRect(96, 70, 264, 26);
+    _brightnessSlider.continuous = YES;
+    [content addSubview:_brightnessSlider];
 
     NSButton *cancel = [NSButton buttonWithTitle:@"Cancel" target:self action:@selector(cancelClick:)];
     cancel.frame = NSMakeRect(180, 16, 88, 32);
@@ -444,15 +478,27 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     [content addSubview:ok];
 }
 
+- (void)brightnessChanged:(id)sender {
+    [self applyBrightness:_brightnessSlider.integerValue];
+}
+
+- (void)applyBrightness:(NSInteger)percent {
+    _brightness = GCClampedBrightness(percent) / (CGFloat)kMaxBrightness;
+    [self setNeedsDisplay:YES];
+}
+
 - (void)okClick:(id)sender {
     ScreenSaverDefaults *defaults = GridClock.defaults;
     [defaults setInteger:_displayModePopUp.indexOfSelectedItem forKey:kDisplayModeKey];
+    [defaults setInteger:GCClampedBrightness(_brightnessSlider.integerValue) forKey:kBrightnessKey];
     [defaults synchronize];
+    [self applyBrightness:_brightnessSlider.integerValue];
     [self updateVisibility];
     [self endConfigureSheet];
 }
 
 - (void)cancelClick:(id)sender {
+    [self applyBrightness:_brightnessBeforeEditing];
     [self endConfigureSheet];
 }
 

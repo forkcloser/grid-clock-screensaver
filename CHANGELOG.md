@@ -43,6 +43,11 @@ pipeline refuses to cut a version that has no section here
 
 ### Added
 
+- A Brightness option (5–100 %, default 100) in Options: lit and unlit letters
+  dim together toward black. Continuous, so the preview follows the slider;
+  Cancel restores the saved value. The idea is upstream's
+  [#16](https://github.com/chrstphrknwtn/grid-clock-screensaver/pull/16),
+  implemented there as CSS opacity.
 - `just verify-bundle`: asserts the built bundle's version, bundle identifier,
   arm64-only binary, minimum macOS 14.0, and an intact ad-hoc signature with the
   hardened runtime flag. Run by `just test` and by the release before packaging.
