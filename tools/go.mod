@@ -35,10 +35,10 @@ require (
 	github.com/tetratelabs/wazero v1.10.1 // indirect
 	github.com/urfave/cli/v3 v3.6.1 // indirect
 	github.com/vbatts/git-validation v1.2.2 // indirect
-	golang.org/x/image v0.21.0 // indirect
+	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	mvdan.cc/sh/v3 v3.12.0 // indirect
 )
