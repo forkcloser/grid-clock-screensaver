@@ -18,13 +18,7 @@ registries:
 
 packages:
   # --- go install tools (local registry, GOSUMDB-verified) ---
-  - name: github.com/vbatts/git-validation@v1.2.2
-    registry: local
   # Pseudo-version: the nested cmd/dot module carries no tags upstream.
-  - name: github.com/goccy/go-graphviz/cmd/dot@v0.0.0-20251129032125-76e04975df88
-    registry: local
-  - name: github.com/farcloser/godolint/cmd/godolint@v0.1.0
-    registry: local
   # --- farcloser tools (local registry; standard once registered upstream) ---
   - name: farcloser/limen@v0.3.0 # renovate: depName=farcloser/limen
     registry: local
