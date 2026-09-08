@@ -4,40 +4,8 @@
 # Addition of non-standard tools can be discussed on https://github.com/farcloser/limen
 
 packages:
-  # Every go_install entry names its repo (repo_owner/repo_name): that is where
-  # aqua lists versions from, and without it `aqua update` is a silent no-op.
-  # Naming the repo changes aqua's default package name, so `name:` is spelled
-  # out as the import path. Only tools that never load Go source belong here;
-  # the Go-source analyzers are go.mod tools (book/tooling.md).
-  - type: go_install
-    name: github.com/vbatts/git-validation
-    path: github.com/vbatts/git-validation
-    repo_owner: vbatts
-    repo_name: git-validation
-    description: Validate git commit rules (DCO sign-off, subject length, …)
-    version_source: github_tag
-  # Graphviz dot as a single static Go binary (graphviz compiled to WASM),
-  # which is why it can live in aqua. The cmd/dot module is nested and
-  # untagged upstream, hence the pseudo-version pin; the only tag shape aqua
-  # may ever propose is `cmd/dot/vX.Y.Z` — the root module's tags do not
-  # contain cmd/dot and would break the install.
-  - type: go_install
-    name: github.com/goccy/go-graphviz/cmd/dot
-    path: github.com/goccy/go-graphviz/cmd/dot
-    repo_owner: goccy
-    repo_name: go-graphviz
-    description: Graphviz dot CLI, pure-Go build (WASM via wazero)
-    version_source: github_tag
-    version_prefix: cmd/dot/
-    version_filter: Version startsWith "cmd/dot/"
-  # Nested cmd package of a root-tagged module, same shape as cmd/dot above.
-  - type: go_install
-    name: github.com/farcloser/godolint/cmd/godolint
-    path: github.com/farcloser/godolint/cmd/godolint
-    repo_owner: farcloser
-    repo_name: godolint
-    description: Lint Dockerfiles (a pure-Go port of hadolint)
-    version_source: github_tag
+  # No go_install entries: every Go-built tool is a tool directive in
+  # tools/go.mod (book/tooling.md, "Go-built tools are go.mod tools").
   # limen itself: every repo pins the version that enforces it, so the binary
   # and the canonical files it embeds travel together (no version skew between
   # the checker and the checked). Graduates to the standard registry once

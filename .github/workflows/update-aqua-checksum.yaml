@@ -16,7 +16,7 @@
 # those and the main ruleset requires signatures (see the commit step). Its
 # author is the token's identity: github-actions[bot] by default, or the
 # App/PAT identity when UPDATE_AQUA_CHECKSUM_APP_ID (+ private key secret) or
-# UPDATE_AQUA_CHECKSUM_TOKEN is set — that identity must be in renovate.json5's
+# UPDATE_AQUA_CHECKSUM_TOKEN is set — that identity must be in renovate.json's
 # gitIgnoredAuthors or Renovate stops rebasing. The App is worth it:
 # default-token commits get no CI run.
 name: update-aqua-checksum
@@ -106,26 +106,41 @@ jobs:
           # Limit of the mutation, accepted: FileAddition carries no file
           # mode, so an executable bit cannot travel — both writers here
           # only ever produce plain configuration files.
-          additions="[]"
-          deletions="[]"
+          # Every file the payload touches travels through a FILE, never a
+          # command line. A converged baseline is ~120 kB of configuration,
+          # ~160 kB once base64'd, and Linux caps a single argument at 128 kB
+          # (MAX_ARG_STRLEN): passing the accumulated array as `--argjson` died
+          # with "jq: Argument list too long" and left the branch with a bumped
+          # pin, no checksum, and a red pipeline that never reached its first
+          # recipe. `--rawfile` and `--slurpfile` read from disk; the request
+          # body is uploaded from disk too.
+          work="$(mktemp -d)"
+          trap 'rm -rf "${work}"' EXIT
+          printf '[]' > "${work}/additions.json"
+          printf '[]' > "${work}/deletions.json"
           while IFS= read -r -d '' entry; do
             path="${entry:3}"
             if [ -f "${path}" ]; then
-              additions="$(jq --arg path "${path}" --arg contents "$(base64 -w0 "${path}")" \
-                '. + [{path: $path, contents: $contents}]' <<<"${additions}")"
+              base64 -w0 "${path}" > "${work}/blob"
+              jq --arg path "${path}" --rawfile contents "${work}/blob" \
+                '. + [{path: $path, contents: ($contents | rtrimstr("\n"))}]' \
+                "${work}/additions.json" > "${work}/next"
+              mv "${work}/next" "${work}/additions.json"
             else
-              deletions="$(jq --arg path "${path}" '. + [{path: $path}]' <<<"${deletions}")"
+              jq --arg path "${path}" '. + [{path: $path}]' \
+                "${work}/deletions.json" > "${work}/next"
+              mv "${work}/next" "${work}/deletions.json"
             fi
           done < <(git status --porcelain -z)
           # Signed-off-by: `just do lint commits` enforces DCO on the PR range,
           # bot commits included.
-          payload="$(jq -n \
+          jq -n \
             --arg query 'mutation ($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }' \
             --arg repository "${GITHUB_REPOSITORY}" \
             --arg branch "${BRANCH}" \
             --arg head "$(git rev-parse HEAD)" \
-            --argjson additions "${additions}" \
-            --argjson deletions "${deletions}" \
+            --slurpfile additions "${work}/additions.json" \
+            --slurpfile deletions "${work}/deletions.json" \
             '{query: $query, variables: {input: {
               branch: {repositoryNameWithOwner: $repository, branchName: $branch},
               expectedHeadOid: $head,
@@ -133,7 +148,8 @@ jobs:
                 headline: "chore: update aqua checksums and converge the limen baseline",
                 body: "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
               },
-              fileChanges: {additions: $additions, deletions: $deletions}}}}')"
+              fileChanges: {additions: $additions[0], deletions: $deletions[0]}}}}' \
+            > "${work}/payload.json"
           # GraphQL reports failure in-body over HTTP 200, so success is the
           # presence of the new commit oid, never the HTTP status. No --retry
           # and no -L, on purpose: this is a mutation guarded by
@@ -141,7 +157,7 @@ jobs:
           # way back would fail on the moved head and report a commit that
           # landed as an error, and a redirect must never replay the POST.
           response="$(curl --proto '=https' --tlsv1.2 -fsS -X POST -H "Authorization: bearer ${TOKEN}" \
-            -d "${payload}" https://api.github.com/graphql)"
+            --data-binary "@${work}/payload.json" https://api.github.com/graphql)"
           oid="$(jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"${response}")"
           if [ -z "${oid}" ]; then
             echo "${response}" >&2
