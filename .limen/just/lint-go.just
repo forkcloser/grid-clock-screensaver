@@ -54,7 +54,7 @@ _suppression-check:
 # analyze a go1.N+1 toolchain: it panics with "file requires newer Go version".
 # The two pins move in lockstep — golangci first (a release built with the
 # newer Go), then golang/go — and this check turns the panic into that
-# instruction. The canonical renovate.json5 groups the two bumps for the same
+# instruction. The canonical renovate.json groups the two bumps for the same
 # reason. Compares major.minor only: patch releases share a language version.
 [private]
 _golangci-toolchain-check:
@@ -84,8 +84,9 @@ _golangci-toolchain-check:
 # excludes both analyzers.
 vet: (_banner "lint go" "vet") (_per-platform "go vet -asmdecl -buildtag ./...")
 
-# go.mod/go.sum tidiness, for the module and for tools/ (the analyzers' own
-# module — see _go-tool). Fails printing the diff; `just do fix go mod` repairs.
+# go.mod/go.sum tidiness, for the module and for tools/ (the Go-built tools'
+# own module — see _go-tool in lib.just). Fails printing the diff; `just do fix
+# go mod` repairs.
 mod: (_banner "lint go" "mod")
     go mod tidy -diff
     go -C tools mod tidy -diff
@@ -190,25 +191,3 @@ escape: (_banner "lint go" "escape")
 # behind test-only callers. Informational: native only, not in the default set.
 deadcode: (_banner "lint go" "deadcode") (_go-tool "deadcode" "golang.org/x/tools/cmd/deadcode")
     build/tools/deadcode -test ./...
-
-# Built natively ONCE into build/tools/ from the go.mod `tool` directive
-# (book/tooling.md, "Go-source analyzers are go.mod tools"). The per-platform legs
-# cannot run `go tool <name>`: it honours GOOS/GOARCH and would cross-compile
-# the analyzer itself (exec format error). The directives live in tools/go.mod,
-# a module of its own, so the analyzers' dependency graph never reaches the
-# project's go.mod and its consumers. A tools/go.mod without the directive
-# fails with the command to add it.
-_go-tool name pkg:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! grep -qE '^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)' tools/go.mod 2>/dev/null; then
-        echo "tools/go.mod lacks 'tool {{ pkg }}' — add it: go -C tools get -tool {{ pkg }}@<version> && go -C tools mod tidy (see book/tooling.md)" >&2
-        exit 1
-    fi
-    mkdir -p build/tools
-    # Directory form of -o: go names the binary itself, which on windows means
-    # the .exe suffix the loader needs — git-bash then resolves the bare
-    # build/tools/<name> the recipes call to it. (go strips a /vN major suffix
-    # when naming, so github.com/google/go-licenses/v2 lands as go-licenses.)
-    # -o is resolved relative to -C.
-    GOOS='' GOARCH='' go -C tools build -o '../build/tools/' '{{ pkg }}'

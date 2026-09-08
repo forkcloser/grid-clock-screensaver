@@ -13,16 +13,15 @@ import 'lib.just'
 # --- Project tooling via aqua (see book/tooling.md). Each recipe takes the
 #     owner/repo exactly as it appears in aqua.yaml, e.g. golangci/golangci-lint. ---
 #
-# The Go-source analyzers are go.mod `tool` directives, not aqua packages
-# (book/tooling.md).
+# Go-built tools are go.mod `tool` directives in tools/go.mod, not aqua
+# packages (book/tooling.md): `go -C tools get -tool <pkg>@<version>`, then
+# `go -C tools mod tidy`.
 #
 # The mutating recipes end with a FULL `aqua install`, never `--only-link`:
 # links verify nothing (lazy pulls are a CI economy — wrong at the moment a
-# pin changes), and for checksum-less package types (go_install) the
-# update-checksum step is silent too, so a broken pin would exit green and
-# detonate at first tool use (e.g. a nested, untagged Go module pinned to a
-# repo tag its module zip does not contain). On a warm machine the full
-# install is incremental — only the touched tool downloads or builds.
+# pin changes), so only a real install proves the new pin downloads and
+# verifies. On a warm machine the full install is incremental — only the
+# touched tool downloads.
 
 # Add a new tool at its latest version, e.g. `just do tools add junegunn/fzf`.
 add pkg: (_banner "tools" "add")
@@ -101,5 +100,5 @@ remove pkg: (_banner "tools" "remove")
         }
     ' aqua.yaml > "$tmp"
     mv "$tmp" aqua.yaml
-    aqua remove "{{ pkg }}" || true   # uninstall the binary (no-op for go_install tools)
+    aqua remove "{{ pkg }}" || true   # uninstall the binary
     aqua update-checksum --prune      # drop the now-unused checksum

@@ -50,7 +50,7 @@ just: (_banner "lint" "just")
 # none, so it can sit in the default set for every repo. Rule exceptions
 # belong next to the instruction they excuse, as inline
 # `# hadolint ignore=DLxxxx` pragmas — not in the recipe.
-dockerfile: (_banner "lint" "dockerfile")
+dockerfile: (_banner "lint" "dockerfile") (_go-tool "godolint" "github.com/farcloser/godolint/cmd/godolint")
     #!/usr/bin/env bash
     set -euo pipefail
     # Same enumeration as `lint just`, over both Dockerfile and Containerfile
@@ -66,7 +66,7 @@ dockerfile: (_banner "lint" "dockerfile")
         'Containerfile' '**/Containerfile' 'Containerfile.*' '**/Containerfile.*' '*.Containerfile')
     # godolint runs shellcheck on RUN lines when it finds one on PATH — the
     # pinned one, here.
-    [ ${#files[@]} -eq 0 ] || godolint "${files[@]}"
+    [ ${#files[@]} -eq 0 ] || build/tools/godolint "${files[@]}"
 
 yaml: (_banner "lint" "yaml")
     yamlfmt -conf .limen/.yamlfmt -lint
@@ -142,7 +142,7 @@ links: (_banner "lint" "links")
 # Validate commit hygiene — DCO sign-off, subject length, dangling whitespace —
 # over a commit range (default: everything ahead of the upstream default branch;
 # pass one explicitly otherwise, e.g. `just do lint commits v1.0.0..HEAD`).
-commits range="": (_banner "lint" "commits")
+commits range="": (_banner "lint" "commits") (_go-tool "git-validation" "github.com/vbatts/git-validation")
     #!/usr/bin/env bash
     set -euo pipefail
     # .allowed_signers arms signature DISPLAY for humans; none of the rules
@@ -176,9 +176,9 @@ commits range="": (_banner "lint" "commits")
         done
     fi
     if [ -n "$range" ]; then
-        git-validation -run DCO,short-subject,dangling-whitespace -range "$range"
+        build/tools/git-validation -run DCO,short-subject,dangling-whitespace -range "$range"
     else
-        git-validation -run DCO,short-subject,dangling-whitespace
+        build/tools/git-validation -run DCO,short-subject,dangling-whitespace
     fi
 
 # Verify aqua-checksums.json is in sync with aqua.yaml — the working tree's

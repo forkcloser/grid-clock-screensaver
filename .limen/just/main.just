@@ -41,8 +41,8 @@ export PATH := if os() == 'windows' { aqua_bin + ';' + env_var('PATH') } else { 
 #   GOFLAGS      ambient flags (-mod=mod, -tags=…, -count=1) rewrite what every
 #                go command does; '' leaves the recipes' own args the whole story.
 #   GOSUMDB      pinned to the real checksum database so an ambient GOSUMDB=off
-#                cannot defeat the GOSUMDB verification the go_install pins in
-#                aqua.yaml depend on.
+#                cannot defeat the GOSUMDB verification the tools/go.mod pins
+#                depend on.
 #   GOPRIVATE    '' so no module path is silently exempted from the proxy and
 #                checksum db — a non-empty value is precisely how GOSUMDB gets
 #                bypassed per-path.

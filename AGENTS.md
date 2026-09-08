@@ -49,6 +49,13 @@ chapter; the procedure is limen's `skills/contribute`.
 - **A red inherited from `main`** is explained on the pull request, not fixed in it.
 - **Doctrine can lose the argument, never silently.** A fix that cuts against the book is
   named as such and argued; it is decided, not discovered.
+- **Broken tooling is reported, never worked around in silence.** The rig — limen, the
+  installer, the sandbox wiring — is the human's design. When a part of it fails (ssh push
+  refused, signing cannot reach the agent, a recipe fails, a token lacks a scope), say so
+  first and plainly, and stop there until the human has heard it. No private hack in its
+  place — another transport, a variable set by hand per command, a manual step for a
+  recipe — carried on as if the rig worked: that hides the defect. A workaround is used
+  only after the breakage is reported and the human agrees, and is named as one every time.
 
 ## Communication
 

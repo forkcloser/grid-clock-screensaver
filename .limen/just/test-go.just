@@ -153,9 +153,11 @@ cover: (_banner "test go" "cover")
     fi
 
 # CPU and memory profiles per package, pprof top-20 printed, PNG call graphs
-# via the pinned `dot`. Informational: a failing package is still profiled
-# past. Raw under build/profiles/, PNG under build/profiles-docs/.
-profile: (_banner "test go" "profile")
+# via the pinned `dot` (graphviz as a single Go binary — WASM via wazero —
+# which is what lets it be a tool directive). Informational: a failing package
+# is still profiled past. Raw under build/profiles/, PNG under
+# build/profiles-docs/.
+profile: (_banner "test go" "profile") (_go-tool "dot" "github.com/goccy/go-graphviz/cmd/dot")
     #!/usr/bin/env bash
     set -euo pipefail
     export CGO_ENABLED="{{ go_cgo }}"
@@ -171,7 +173,7 @@ profile: (_banner "test go" "profile")
         src=$1; png=$2; shift 2
         go tool pprof -dot -nodecount=20 "$@" "$src" > "$png.dot" 2>/dev/null
         : > "$png"
-        dot -Tpng -o "$png" "$png.dot"
+        build/tools/dot -Tpng -o "$png" "$png.dot"
         rm -f "$png.dot"
         echo "  -> $png"
     }
