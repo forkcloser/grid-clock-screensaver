@@ -36,3 +36,5 @@ packages:
   - name: cli/cli@v2.96.0
   - name: uutils/coreutils@0.11.0
     registry: local
+  - name: quint-co/quint@v0.32.0 # renovate: depName=quint-co/quint
+    registry: local

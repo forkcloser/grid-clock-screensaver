@@ -7,30 +7,44 @@ set working-directory := '../..'
 # Silence just's per-line command echo; recipes announce themselves via _banner.
 set quiet
 
-# Shared private _banner recipe (see lib.just).
+# Shared private _banner recipe and go_tool_build (see lib.just).
 import 'lib.just'
 
-# --- Project tooling via aqua (see book/tooling.md). Each recipe takes the
-#     owner/repo exactly as it appears in aqua.yaml, e.g. golangci/golangci-lint. ---
+# --- Project tooling (see book/tooling.md). Every recipe takes the tool as it
+#     is pinned: an aqua slug exactly as in aqua.yaml (golangci/golangci-lint),
+#     or a Go package path exactly as in tools/go.mod
+#     (golang.org/x/tools/cmd/deadcode). ---
 #
-# Go-built tools are go.mod `tool` directives in tools/go.mod, not aqua
-# packages (book/tooling.md): `go -C tools get -tool <pkg>@<version>`, then
-# `go -C tools mod tidy`.
+# The two are told apart by the first path element: a Go module root is a
+# host and always carries a dot; a GitHub owner never can. aqua.yaml holds no
+# go_install package any more (book/tooling.md), so there is no overlap.
 #
-# The mutating recipes end with a FULL `aqua install`, never `--only-link`:
-# links verify nothing (lazy pulls are a CI economy — wrong at the moment a
-# pin changes), so only a real install proves the new pin downloads and
-# verifies. On a warm machine the full install is incremental — only the
-# touched tool downloads.
+# The mutating recipes end by really installing the tool, never by linking:
+# a FULL `aqua install` for an aqua package (links verify nothing — lazy pulls
+# are a CI economy, wrong at the moment a pin changes; on a warm machine the
+# full install is incremental), and a native build into build/tools/ for a
+# Go tool (the same build _go-tool does before a recipe runs it). Either way a
+# bad pin fails here, not at first use.
 
 # Add a new tool at its latest version, e.g. `just do tools add junegunn/fzf`.
 add pkg: (_banner "tools" "add")
     #!/usr/bin/env bash
     set -euo pipefail
-    # Regex-escape the slug: aqua slugs carry dots, and an unescaped '.' would
-    # match a sibling (`foo/li.r` vs `foo/liar`). ']' and '\' are absent from
-    # slugs and trip BSD sed.
+    # Regex-escape the name: slugs and package paths carry dots, and an
+    # unescaped '.' would match a sibling (`foo/li.r` vs `foo/liar`). ']' and
+    # '\' are absent from both and trip BSD sed.
     esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
+    first='{{ pkg }}'; first=${first%%/*}
+    if [[ $first == *.* ]]; then
+        if grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
+            echo "{{ pkg }} is already a tool directive in tools/go.mod — use 'just do tools update <command>' or 'just do tools set {{ pkg }} <version>'." >&2
+            exit 1
+        fi
+        go -C tools get -tool '{{ pkg }}@latest'   # the directive, at the latest release
+        go -C tools mod tidy
+        {{ go_tool_build }} '{{ pkg }}'           # REAL build: a bad pin fails here, not at first use
+        exit 0
+    fi
     if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" aqua.yaml; then
         echo "{{ pkg }} is already in aqua.yaml — use 'just do tools update {{ pkg }}' or 'just do tools set {{ pkg }} <version>'." >&2
         exit 1
@@ -45,6 +59,17 @@ set pkg version: (_banner "tools" "set")
     set -euo pipefail
     # See `add` for the escaping.
     esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
+    first='{{ pkg }}'; first=${first%%/*}
+    if [[ $first == *.* ]]; then
+        if ! grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
+            echo "{{ pkg }} is not a tool directive in tools/go.mod — add it with 'just do tools add {{ pkg }}'." >&2
+            exit 1
+        fi
+        go -C tools get -tool '{{ pkg }}@{{ version }}'   # moves the pin
+        go -C tools mod tidy
+        {{ go_tool_build }} '{{ pkg }}'                   # REAL build: a bad pin fails here, not at first use
+        exit 0
+    fi
     if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}@" aqua.yaml; then
         echo "{{ pkg }} is not pinned in aqua.yaml — add it with 'just do tools add {{ pkg }}'." >&2
         exit 1
@@ -58,12 +83,54 @@ set pkg version: (_banner "tools" "set")
     aqua update-checksum --prune      # new checksum in, replaced version's out
     aqua install                      # REAL install: a bad pin fails here, not at first use
 
-# Update an existing tool to its latest version, e.g. `just do tools update golangci-lint`.
-# Takes the COMMAND name (`just`, `limen`), not the package slug: `aqua update`
-# resolves a command to its pinned package, local registry included.
-update command: (_banner "tools" "update")
+# Takes the COMMAND name (`just`, `limen`, `deadcode`), not the package: `aqua
+# update` resolves a command to its pinned package, local registry included,
+# and a tool directive is found by the command it builds as. With no argument
+# every tool moves: each aqua package and the registries (`aqua update`), then
+# each directive at its latest — one `go get` for all of them, so the module
+# graph is solved once — and every directive is rebuilt. Renovate does this
+# one tool at a time; the no-argument form is for moving everything by hand
+# and reading one diff. (The blank line below keeps this paragraph out of
+# `just --list`; only the line right above the recipe is its doc.)
+
+# Update one tool to its latest version (`just do tools update golangci-lint`), or every tool with no argument.
+update command="": (_banner "tools" "update")
     #!/usr/bin/env bash
     set -euo pipefail
+    # Every directive in tools/go.mod: a `tool` line and a `tool (…)` block are
+    # both walked; a `//` comment line inside the block is not a directive.
+    # (A read loop, not mapfile: macOS ships bash 3.)
+    pkgs=()
+    while IFS= read -r p; do pkgs+=("$p"); done < <(awk '
+        /^tool[[:blank:]]*\(/ { block = 1; next }
+        block && /^\)/ { block = 0; next }
+        /^tool[[:blank:]]/ { print $2 }
+        block && NF && $1 !~ /^\/\// { print $1 }
+    ' tools/go.mod 2>/dev/null || true)
+    # A directive builds as its last path element, except that go strips a /vN
+    # major suffix (github.com/google/go-licenses/v2 builds as go-licenses —
+    # see _go-tool).
+    name_of() { local n=${1##*/}; if [[ $n =~ ^v[0-9]+$ ]]; then n=${1%/*}; n=${n##*/}; fi; printf '%s' "$n"; }
+    if [ -z '{{ command }}' ]; then
+        aqua update                       # every package and the registries, to the latest
+        aqua update-checksum --prune      # new checksums in, replaced versions' out
+        aqua install                      # REAL install: a bad pin fails here, not at first use
+        if [ ${#pkgs[@]} -gt 0 ]; then
+            go -C tools get -tool "${pkgs[@]/%/@latest}"   # one solve for all of them
+            go -C tools mod tidy
+            {{ go_tool_build }} "${pkgs[@]}"              # REAL build of every directive
+        fi
+        exit 0
+    fi
+    # ${pkgs[@]+…}: under set -u, bash 3 treats an empty array as unset.
+    for p in ${pkgs[@]+"${pkgs[@]}"}; do
+        if [ "$(name_of "$p")" = '{{ command }}' ]; then
+            go -C tools get -tool "${p}@latest"   # bump tools/go.mod to the latest release
+            go -C tools mod tidy
+            {{ go_tool_build }} "$p"              # REAL build: a bad pin fails here, not at first use
+            exit 0
+        fi
+    done
     aqua update "{{ command }}"       # bump aqua.yaml to the latest release
     aqua update-checksum --prune      # new checksum in, replaced version's out
     aqua install                      # REAL install: a bad pin fails here, not at first use
@@ -72,8 +139,22 @@ update command: (_banner "tools" "update")
 remove pkg: (_banner "tools" "remove")
     #!/usr/bin/env bash
     set -euo pipefail
-    # Regex-escape the slug before grep -E — see `add` for why.
+    # See `add` for the escaping.
     esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
+    first='{{ pkg }}'; first=${first%%/*}
+    if [[ $first == *.* ]]; then
+        if ! grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
+            echo "{{ pkg }} is not a tool directive in tools/go.mod — nothing to remove." >&2
+            exit 1
+        fi
+        go -C tools get -tool '{{ pkg }}@none'   # drops the directive
+        go -C tools mod tidy                     # and the requirements only it needed
+        # The built binary, named as go names it: last element, /vN stripped.
+        pkg='{{ pkg }}'; name=${pkg##*/}
+        if [[ $name =~ ^v[0-9]+$ ]]; then name=${pkg%/*}; name=${name##*/}; fi
+        rm -f "build/tools/${name}" "build/tools/${name}.exe"
+        exit 0
+    fi
     if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" aqua.yaml; then
         echo "{{ pkg }} is not in aqua.yaml — nothing to remove." >&2
         exit 1

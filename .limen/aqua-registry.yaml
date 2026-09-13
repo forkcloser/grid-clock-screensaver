@@ -72,3 +72,26 @@ packages:
       - darwin/arm64
       - linux
       - windows
+  # Quint (quint.sh): executable formal specifications, the model language of
+  # the spec-driven testing experiment (traces in ITF, replayed against the
+  # implementation). Upstream ships one bare Node-bundled binary per platform,
+  # with no checksums, signatures, or attestations: sourcing-ladder rung 1 on
+  # trust-on-first-use — aqua pins the checksum on first fetch. No
+  # windows/arm64 asset upstream. The repo also tags `evaluator/vX.Y.Z`
+  # releases (the Rust simulator that `quint run` downloads at run time into
+  # $QUINT_HOME unless told `--backend=typescript`); they are a different
+  # artifact and are filtered out of version resolution here.
+  - type: github_release
+    repo_owner: quint-co
+    repo_name: quint
+    description: Executable formal specifications (TLA+ semantics, ITF traces)
+    asset: quint-{{.OS}}-{{.Arch}}
+    format: raw
+    replacements:
+      darwin: macos
+      windows: pc
+    version_filter: not (Version startsWith "evaluator/")
+    supported_envs:
+      - darwin
+      - linux
+      - windows/amd64
