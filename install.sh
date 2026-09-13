@@ -8,7 +8,7 @@
 # (the readme shows the by-hand check). cosign verification comes before
 # de-quarantine, the archive name comes from the verified checksums.txt rather
 # than a guess, and the script stops rather than downgrade to checksum-only;
-# --allow-unverified opts in. Why: readme.md, "From a release".
+# --allow-unverified opts in. Why: README.md, "From a release".
 
 set -euo pipefail
 
