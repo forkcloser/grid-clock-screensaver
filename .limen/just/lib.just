@@ -44,25 +44,28 @@ _per-platform +cmd:
         done
     fi
 
+# The native build of one tools/go.mod tool into build/tools/, shared by
+# _go-tool and the tools recipes (`{{ go_tool_build }} <pkg>`). GOOS/GOARCH
+# cleared: a per-platform leg would cross-compile the tool itself (exec format
+# error). Directory form of -o: go names the binary itself, which on windows
+# means the .exe suffix the loader needs — git-bash then resolves the bare
+# build/tools/<name> the recipes call to it. (go strips a /vN major suffix
+# when naming, so github.com/google/go-licenses/v2 lands as go-licenses.)
+# -o is resolved relative to -C.
+go_tool_build := "mkdir -p build/tools && GOOS='' GOARCH='' go -C tools build -o '../build/tools/'"
+
 # Every Go-built tool the recipes run — the Go-source analyzers and the rest
 # alike — is a `tool` directive in tools/go.mod, a module of its own, built
 # natively ONCE into build/tools/ by the pinned go (book/tooling.md, "Go-built
-# tools are go.mod tools"). Never `go tool <name>` from a per-platform leg: it
-# honours GOOS/GOARCH and would cross-compile the tool itself (exec format
-# error). A tools/go.mod without the directive fails with the command to add
-# it. Recipes depend on this with the tool's name and package, then call
+# tools are go.mod tools"). Never `go tool <name>` from a per-platform leg.
+# A tools/go.mod without the directive fails with the recipe that adds it.
+# Recipes depend on this with the tool's name and package, then call
 # build/tools/<name>.
 _go-tool name pkg:
     #!/usr/bin/env bash
     set -euo pipefail
     if ! grep -qE '^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)' tools/go.mod 2>/dev/null; then
-        echo "tools/go.mod lacks 'tool {{ pkg }}' — add it: go -C tools get -tool {{ pkg }}@<version> && go -C tools mod tidy (see book/tooling.md)" >&2
+        echo "tools/go.mod lacks 'tool {{ pkg }}' — add it: just do tools add {{ pkg }} (see book/tooling.md)" >&2
         exit 1
     fi
-    mkdir -p build/tools
-    # Directory form of -o: go names the binary itself, which on windows means
-    # the .exe suffix the loader needs — git-bash then resolves the bare
-    # build/tools/<name> the recipes call to it. (go strips a /vN major suffix
-    # when naming, so github.com/google/go-licenses/v2 lands as go-licenses.)
-    # -o is resolved relative to -C.
-    GOOS='' GOARCH='' go -C tools build -o '../build/tools/' '{{ pkg }}'
+    {{ go_tool_build }} '{{ pkg }}'

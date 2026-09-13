@@ -20,7 +20,7 @@ packages:
   # --- go install tools (local registry, GOSUMDB-verified) ---
   # Pseudo-version: the nested cmd/dot module carries no tags upstream.
   # --- farcloser tools (local registry; standard once registered upstream) ---
-  - name: farcloser/limen@v0.3.0 # renovate: depName=farcloser/limen
+  - name: farcloser/limen@v0.4.0 # renovate: depName=farcloser/limen
     registry: local
   # --- toolchain + binary-release tools (standard registry, aqua-verified) ---
   - name: golang/go@go1.26.4
@@ -35,4 +35,6 @@ packages:
   - name: jqlang/jq@jq-1.8.2
   - name: cli/cli@v2.96.0
   - name: uutils/coreutils@0.11.0
+    registry: local
+  - name: quint-co/quint@v0.32.0 # renovate: depName=quint-co/quint
     registry: local
