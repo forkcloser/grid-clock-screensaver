@@ -8,6 +8,13 @@ pipeline refuses to cut a version that has no section here
 
 ## [Unreleased]
 
+### Changed
+
+- Licensing: upstream's author granted a licence to reproduce and distribute
+  the original code without limitation
+  (chrstphrknwtn/grid-clock-screensaver#13, 2026-09-19). The readme records
+  it; the repository is MIT throughout.
+
 ## [1.0.0] - 2026-09-12
 
 ### Changed
