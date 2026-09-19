@@ -10,9 +10,8 @@ lit ones read out the time.
 This is a fork of [chrstphrknwtn/grid-clock-screensaver](https://github.com/chrstphrknwtn/grid-clock-screensaver),
 ported to modern macOS.
 
-> **On licensing:** upstream carries no license at all, so this fork's MIT
-> grant covers only what this fork wrote — not the clock's design, which is
-> upstream's. Read [Licensing](#licensing) before depending on this.
+> **Licensing:** [MIT](./LICENSE), including the original code, under the
+> grant in [Licensing](#licensing).
 
 Upstream (0.0.5, 2018) drew the clock as a local HTML page inside a `WebView` —
 WebKit 1. That stopped working on macOS 14, which moved screensavers into the
@@ -230,6 +229,11 @@ Behaviour is otherwise identical to 0.0.5, with one addition.
   scheme so `xcodebuild -scheme` works straight from a clone. `Info.plist` is
   gone — it is generated from build settings now.
 
+## Reporting
+
+The issue tracker is off. Security reports go through
+[private vulnerability reporting](https://github.com/forkcloser/grid-clock-screensaver/security/advisories/new).
+
 ## Development
 
 The repository follows [limen](https://github.com/farcloser/limen), so the
@@ -273,39 +277,19 @@ through.
 
 ## Licensing
 
-**This fork's own work is [MIT](./LICENSE). Upstream's is not licensed at all,
-and this fork cannot fix that.**
+[MIT](./LICENSE).
 
-[chrstphrknwtn/grid-clock-screensaver](https://github.com/chrstphrknwtn/grid-clock-screensaver)
-carries no `LICENSE` file and no license metadata. That is not a technicality:
-absent a license, the default is that no rights are granted, and it has been
-asked about upstream in
-[issue #12](https://github.com/chrstphrknwtn/grid-clock-screensaver/issues/12)
-("Question Regarding Open Source License", opened November 2024) — **still
-unanswered**.
+Upstream has no `LICENSE` file. On 2026-09-19, its author granted this fork,
+in [chrstphrknwtn/grid-clock-screensaver#13](https://github.com/chrstphrknwtn/grid-clock-screensaver/issues/13):
 
-So, to be exact about what the MIT grant here does and does not cover:
+> I hereby grant you a licence to reproduce and distribute the original code,
+> without limitation.
+>
+> I will leave this repo as a historical artefact, and let your fork be a
+> distinct modern version.
 
-- **It covers what this fork wrote** — the Core Text renderer, the port of the
-  time-to-cells rules into C, the configure sheet, the project file, the tests,
-  the tooling, and this documentation.
-- **It does not, and cannot, cover upstream's work.** The letter grid, the
-  vocabulary of the clock face, the `#222`/`#fff` palette, the 400 ms
-  crossfade, and the rules for which words light at which minute are
-  Christopher Newton's design. This fork reimplemented them; it did not
-  originate them, and it has no standing to license them to you. The parity
-  test in `test/` exists precisely because the behaviour is upstream's — it
-  measures the fidelity of the reimplementation, and in doing so documents the
-  debt.
-
-We are not claiming rights we do not hold. If you need certainty about the
-upstream portion, the answer has to come from upstream. If you are Christopher
-Newton and would like this fork changed — relicensed, attributed differently,
-or taken down — say so on
-[chrstphrknwtn/grid-clock-screensaver#13](https://github.com/chrstphrknwtn/grid-clock-screensaver/issues/13),
-the thread this fork opened with you for exactly that conversation, and it will
-be done. (This repository's own issue tracker is off; security reports go
-through [private vulnerability reporting](https://github.com/forkcloser/grid-clock-screensaver/security/advisories/new).)
+The clock's design (letter grid, vocabulary, palette, crossfade, minute rules)
+is Christopher Newton's.
 
 ## Related
 
