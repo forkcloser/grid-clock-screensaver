@@ -14,6 +14,9 @@ pipeline refuses to cut a version that has no section here
   the original code without limitation
   (chrstphrknwtn/grid-clock-screensaver#13, 2026-09-19). The readme records
   it; the repository is MIT throughout.
+- The readme is for users: requirements, install, options, uninstall. The
+  port's rationale, how it works, differences from upstream, tooling, tests,
+  installer verification and releases moved to `DEVELOPMENT.md`.
 
 ## [1.0.0] - 2026-09-12
 
