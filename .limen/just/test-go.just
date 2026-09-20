@@ -153,22 +153,22 @@ cover: (_banner "test go" "cover")
     fi
 
 # CPU and memory profiles per package, pprof top-20 printed, PNG call graphs
-# via the pinned `dot` (graphviz as a single Go binary — WASM via wazero —
-# which is what lets it be a tool directive). Informational: a failing package
-# is still profiled past. Raw under build/profiles/, PNG under
-# build/profiles-docs/.
-profile: (_banner "test go" "profile") (_go-tool "dot" "github.com/goccy/go-graphviz/cmd/dot")
+# via the pinned `dot` (forkcloser/dot: graphviz as a single Go binary — WASM
+# via wazero — tagged, which is what lets it be a tool directive that moves).
+# Informational: a failing package is still profiled past. Raw under
+# build/profiles/, PNG under build/profiles-docs/.
+profile: (_banner "test go" "profile") (_go-tool "dot" "github.com/forkcloser/dot/cmd/dot")
     #!/usr/bin/env bash
     set -euo pipefail
     export CGO_ENABLED="{{ go_cgo }}"
     prof=build/profiles
     docs=build/profiles-docs
     mkdir -p "$prof" "$docs"
-    # pprof's own -png shells out to dot writing to a pipe, which the WASM dot
-    # cannot do (it needs -o) — so render from pprof's -dot text instead. The
-    # pre-create matters: under a sandbox the WASM runtime can overwrite files
-    # but not always create them. Paths stay cwd-relative for the same reason
-    # (the runtime preopens only the working directory).
+    # Rendered from pprof's -dot text rather than pprof's own -png, which
+    # shells out to a dot it expects on PATH. -o with a pre-created file: under
+    # a sandbox the WASM runtime can overwrite files but not always create
+    # them. Paths stay cwd-relative for the same reason (the runtime preopens
+    # only the working directory).
     render() {
         src=$1; png=$2; shift 2
         go tool pprof -dot -nodecount=20 "$@" "$src" > "$png.dot" 2>/dev/null
