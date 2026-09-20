@@ -7,9 +7,11 @@
 #
 # A WRITE workflow, hardened: `push:` on the branch prefix, never
 # pull_request_target; no credential kept by checkout and no secrets in the
-# update steps' environment; nothing runs through `just` (a write job does not
-# execute recipe code the branch controls); the commit step uses runner tools
-# only, with the token scoped to that step; the branch name reaches the shell
+# update steps' environment beyond the job's own token where a verifier must
+# read from GitHub; nothing runs through `just` (a write job does not execute
+# recipe code the branch controls — what runs is aqua, and the limen release
+# the branch selects by checksum); the commit step uses runner tools only,
+# with the push token scoped to that step; the branch name reaches the shell
 # via env; no loop, since a default-token commit triggers no workflows.
 #
 # The commit goes through GraphQL createCommitOnBranch because GitHub signs
@@ -71,6 +73,18 @@ jobs:
         if: github.repository != 'farcloser/limen'
         run: aqua exec -- limen fix .
 
+      - name: Refresh the digests of pinned artifacts, if the project declares any
+        # The same pinned release, on the project's pins.yaml: a version
+        # Renovate moved gets its digest recomputed through the verifier the
+        # entry declares (book/tooling.md, "Pinned artifacts"). The job's own
+        # token, read-only in use, is what `gh attestation verify` needs to
+        # ask GitHub for an attestation; the code holding it is the release
+        # the branch selects by checksum, never recipe text.
+        if: github.repository != 'farcloser/limen' && hashFiles('pins.yaml') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: aqua exec -- limen pins refresh
+
       - name: Mint a push token, if the App is configured
         # After the update steps, so those run with no secrets. One-hour token,
         # this repository only; the private key only mints.
@@ -98,8 +112,8 @@ jobs:
           # unsigned fix-up commit made every aqua-bump PR unmergeable
           # (book/github.md).
           #
-          # The whole dirty tree, on purpose: exactly two writers ran since
-          # checkout (update-checksum and the pinned limen's fix), and a path
+          # The whole dirty tree, on purpose: exactly three writers ran since
+          # checkout (update-checksum, the pinned limen's fix and pins refresh), and a path
           # list baked into the older running workflow cannot know the new
           # baseline's surface.
           #
@@ -145,7 +159,7 @@ jobs:
               branch: {repositoryNameWithOwner: $repository, branchName: $branch},
               expectedHeadOid: $head,
               message: {
-                headline: "chore: update aqua checksums and converge the limen baseline",
+                headline: "chore: refresh checksums and converge the limen baseline",
                 body: "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
               },
               fileChanges: {additions: $additions[0], deletions: $deletions[0]}}}}' \
