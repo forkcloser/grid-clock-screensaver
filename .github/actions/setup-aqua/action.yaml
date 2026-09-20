@@ -53,6 +53,17 @@ runs:
           echo "${AQUA_INSTALLER_SHA256}  ${tmp}/aqua-installer" | shasum -a 256 -c -
         fi
         chmod +x "${tmp}/aqua-installer"
+        # The installer fetches the aqua binary with a bare `curl --retry 5
+        # --fail -L`, so the schannel failure guarded above reaches it too
+        # (exit 35 is a handshake failure, which --retry never covers). The
+        # flag goes to it through a .curlrc under CURL_HOME, windows only,
+        # for the rest of this step: the installer verifies the download
+        # against its own pinned sha256 list, so the guard costs nothing.
+        if [ "${RUNNER_OS:-}" = "Windows" ]; then
+          mkdir -p "${tmp}/curl"
+          echo 'ssl-revoke-best-effort' >"${tmp}/curl/.curlrc"
+          export CURL_HOME="${tmp}/curl"
+        fi
         # Git for Windows' arm64 build ships an x86_64 bash, so `uname -m` lies
         # and the installer would fetch amd64 aqua, which then resolves EVERY
         # package emulated. RUNNER_ARCH is the truth: a uname shim for the

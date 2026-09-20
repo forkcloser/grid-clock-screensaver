@@ -53,6 +53,10 @@ just: (_banner "lint" "just")
 dockerfile: (_banner "lint" "dockerfile") (_go-tool "godolint" "github.com/farcloser/godolint/cmd/godolint")
     #!/usr/bin/env bash
     set -euo pipefail
+    # Twice on windows-11-arm this body exited 4 within a second of starting,
+    # before any tool ran, with no output; the trap makes the next one say
+    # which line, since a silent exit cannot be diagnosed from a log.
+    trap 'echo "lint dockerfile: line $LINENO exited $?" >&2' ERR
     # Same enumeration as `lint just`, over both Dockerfile and Containerfile
     # spellings. '*.Dockerfile' needs no '**/' twin: a wildcard already matches
     # across directories.
@@ -79,16 +83,34 @@ shell: (_banner "lint" "shell")
     #   - a shebang on line 1 for a dialect shellcheck lints (sh/bash/dash/ksh —
     #     not zsh, which shellcheck cannot check) → covers extension-less scripts.
     # Filtering on the shebang alone would silently skip an *.sh that forgot its shebang.
-    # No mapfile (bash 4+): build the array with a read loop, portable to bash 3.2.
+    # No mapfile (bash 4+): build the arrays with read loops, portable to bash 3.2.
+    # Process count is the cost that matters: under git-bash a process is tens
+    # of milliseconds, and a head and a grep per file made this recipe six
+    # times slower on windows than on linux. The loop below is builtins only,
+    # and one awk per hundred candidates (windows caps a command line at 32K)
+    # reads their first lines. No \b in awk regexes — the word boundary is
+    # spelled out.
     files=()
+    candidates=()
     while IFS= read -r -d '' f; do
         # Tracked-but-deleted files are skipped (see `lint just`).
         [ -f "$f" ] || continue
         case "$f" in
             *.sh|*.bash) files+=("$f"); continue ;;
         esac
-        head -n 1 "$f" 2>/dev/null | grep -qE '^#!.*\b(bash|dash|ksh|sh)\b' && files+=("$f")
+        candidates+=("$f")
     done < <(git ls-files -z --cached --others --exclude-standard)
+    while IFS= read -r -d '' f; do files+=("$f"); done < <(
+        for ((i = 0; i < ${#candidates[@]}; i += 100)); do
+            awk '
+                FNR == 1 {
+                    # %c with 0, not "\0" in the format: a NUL inside an awk
+                    # string ends it, and the names would run together unterminated.
+                    if ($0 ~ /^#!.*[^[:alnum:]_](bash|dash|ksh|sh)([^[:alnum:]_]|$)/) printf "%s%c", FILENAME, 0
+                    nextfile
+                }' "${candidates[@]:i:100}"
+        done
+    )
     [ ${#files[@]} -eq 0 ] || shellcheck --rcfile .limen/.shellcheckrc "${files[@]}"
     # Shebang recipes inside justfiles are shell scripts too: extract each body
     # from the JSON dump and shellcheck it. Interpolations (just syntax, not
@@ -99,25 +121,39 @@ shell: (_banner "lint" "shell")
     trap 'rm -rf "$tmpdir"' EXIT
     recipes=()
     dump=$(just --dump --dump-format json)
-    # base64 carries multi-line bodies across the TSV pipe. The trailing tr is
-    # load-bearing: native windows jq writes CRLF and the \r corrupts the base64.
-    while IFS=$'\t' read -r name body; do
-        # ':' is illegal in windows filenames; the name is only a label, so
-        # module separators are flattened.
-        out="$tmpdir/${name//:/_}"
-        printf '%s' "$body" | base64 -d > "$out"
-        head -n 1 "$out" | grep -qE '^#!.*\b(bash|dash|ksh|sh)\b' || continue
-        recipes+=("$out")
-    done < <(printf '%s' "$dump" | jq -r '
-        def recipes_of(prefix):
-            ((.recipes // {}) | to_entries[]
-                | [prefix + .key,
-                   (.value.body
-                    | map(map(if type == "string" then . else "INTERP" end) | join(""))
-                    | join("\n") | @base64)]),
-            ((.modules // {}) | to_entries[]
-                | .key as $mod | .value | recipes_of(prefix + $mod + "::"));
-        recipes_of("") | @tsv' | tr -d '\r')
+    # jq keeps the shebang recipes and emits each as a record — name, body,
+    # then a \x1e separator, a byte no source carries — and ONE awk writes the
+    # bodies out, rather than a base64 and a head per recipe. The separator
+    # is built with implode, never spelled as a byte or an escape in this text: the recipe
+    # is itself in the dump, and a JSON escape in its text decodes to the
+    # byte and splits its own record. The tr is load-bearing: native windows
+    # jq writes CRLF. Every record after the first starts with the newline jq
+    # prints after the separator. ':' is illegal in windows filenames; the
+    # name is only a label, so module separators are flattened.
+    while IFS= read -r name; do recipes+=("$tmpdir/$name"); done < <(
+        printf '%s' "$dump" | jq -r '
+            def recipes_of(prefix):
+                ((.recipes // {}) | to_entries[]
+                    | (.value.body
+                       | map(map(if type == "string" then . else "INTERP" end) | join(""))) as $lines
+                    | select(($lines[0] // "") | test("^#!.*\\b(bash|dash|ksh|sh)\\b"))
+                    | prefix + .key, ($lines | join("\n")), ([30] | implode)),
+                ((.modules // {}) | to_entries[]
+                    | .key as $mod | .value | recipes_of(prefix + $mod + "::"));
+            recipes_of("")' | tr -d '\r' | awk -v dir="$tmpdir" '
+            BEGIN { RS = "\036" }
+            {
+                sub(/^\n/, "")
+                n = index($0, "\n")
+                if (n == 0) next
+                name = substr($0, 1, n - 1)
+                gsub(/:/, "_", name)
+                out = dir "/" name
+                printf "%s", substr($0, n + 1) > out
+                close(out)
+                print name
+            }'
+    )
     # SC1010 is excluded for recipe bodies only: `just do <task>` is our shared
     # namespace, and shellcheck misreads the argument "do" as the shell keyword.
     # The constant-word checks (SC2050/SC2078/SC2157/SC2194) are excluded for

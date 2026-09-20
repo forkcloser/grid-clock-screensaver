@@ -60,7 +60,12 @@ _suppression-check:
 _golangci-toolchain-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    built="$(golangci-lint version 2>/dev/null | sed -nE 's/.*built with go([0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
+    # The probe must not be the failure: a golangci-lint that cannot run
+    # (aqua refusing a pin with no checksum yet, say) failed this recipe under
+    # pipefail with its stderr discarded, so the run died with no message at
+    # all. Its stderr is let through and its status ignored; the check then
+    # skips, and `golangci-lint run` fails next with the same error, visibly.
+    built="$({ golangci-lint version || true; } | sed -nE 's/.*built with go([0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
     toolchain="$(go env GOVERSION | sed -nE 's/^go([0-9]+\.[0-9]+).*/\1/p')"
     if [ -n "$built" ] && [ -n "$toolchain" ] && [ "$(printf '%s\n%s\n' "$toolchain" "$built" | sort -V | tail -n 1)" != "$built" ]; then
         echo "golangci-lint was built with go${built} but the pinned toolchain is go${toolchain}:" >&2
