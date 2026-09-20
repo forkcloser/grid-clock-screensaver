@@ -17,8 +17,8 @@ github.com/flopp/go-findfont v0.1.0 h1:lPn0BymDUtJo+ZkV01VS3661HL6F4qFlkhcJN55u6
 github.com/flopp/go-findfont v0.1.0/go.mod h1:wKKxRDjD024Rh7VMwoU90i6ikQRCr+JTHB5n4Ejkqvw=
 github.com/fogleman/gg v1.3.0 h1:/7zJX8F6AaYQc57WQCyN9cAIz+4bCJGO9B+dyW29am8=
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
-github.com/forkcloser/dot v1.0.0 h1:LkNXPN//hZHo5+Wj1eYtUhlAucU67Jnwk2lHE7w7HDQ=
-github.com/forkcloser/dot v1.0.0/go.mod h1:S/l7132gVcxp3sZDuCeuZFA0FXbwDOioEJm6KEpZlPs=
+github.com/forkcloser/dot v1.0.1 h1:O/EMYU2RrFEIDZeDipmrwTg546xJFxl8pSv4OIUniJE=
+github.com/forkcloser/dot v1.0.1/go.mod h1:S/l7132gVcxp3sZDuCeuZFA0FXbwDOioEJm6KEpZlPs=
 github.com/go-quicktest/qt v1.101.0 h1:O1K29Txy5P2OK0dGo59b7b0LR6wKfIhttaAhHUyn7eI=
 github.com/go-quicktest/qt v1.101.0/go.mod h1:14Bz/f7NwaXPtdYEgzsx46kqSxVwTbzVZsDC26tQJow=
 github.com/goccy/go-graphviz v0.2.10 h1:jHu/1I0Iw0xIzzYk96Ous/ZeuD11Rt2oW8juHdIE30g=
