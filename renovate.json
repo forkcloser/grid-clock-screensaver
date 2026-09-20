@@ -6,7 +6,7 @@
     "gitIgnoredAuthors: the update-aqua-checksum workflow pushes a fix-up commit onto Renovate's branches; without this, Renovate treats the branch as human-modified and stops rebasing it. The org's App identity is the org's, so the array stays here (the `renovate` rule maintains it) rather than in the preset."
   ],
   "extends": [
-    "github>farcloser/limen#v0.5.0"
+    "github>farcloser/limen#v0.5.2"
   ],
   "forkProcessing": "enabled",
   "gitIgnoredAuthors": [
