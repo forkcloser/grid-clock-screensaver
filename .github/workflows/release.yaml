@@ -1,18 +1,12 @@
 # Diverges from limen's canonical release.yaml in `runs-on` only. Keep
 # everything else in sync.
 #
-# The workflow half of the CI release lane: `just do release vX.Y.Z` on a
-# laptop verifies the tree, creates the SIGNED tag (a human signs the intent),
-# and pushes it — that push triggers this workflow, which builds, signs the
-# ARTIFACTS with keyless cosign (Fulcio: the workflow's OIDC identity replaces
-# any key — there is no key to store, leak, or rotate), and publishes the
-# GitHub release. Same construction rules as ci.yaml: one SHA-pinned
-# first-party action, checksum-verified aqua bootstrap, and the recipe as the
-# interface (`just do release --ci` — what it does is defined in
-# .limen/just/release.just, not here).
-#
-# Worth pairing with a repository ruleset restricting who can create v* tags:
-# the tag push is the release button.
+# The workflow half of the release lane:
+# `just do release vX.Y.Z` verifies the tree, creates the SIGNED tag and
+# pushes it; that push runs `just do release --ci`, which builds, signs
+# keyless and publishes (defined in .limen/just/release.just, not here). Pair
+# with a ruleset restricting who can create v* tags: the tag push is the
+# release button.
 name: release
 
 on:
@@ -21,21 +15,14 @@ on:
 
 permissions: {}
 
-# One release at a time PER TAG, never cancelled mid-publish. The group MUST be
-# keyed by the ref, not a constant: a constant group puts every tag's release in
-# one queue, and GitHub keeps only the newest *pending* run per group — so pushing
-# several tags at once ("Canceling since a higher priority waiting request …")
-# silently cancels the queued releases for the older tags. Keying by ref makes each
-# tag its own group: different tags never cancel each other, and a re-push of the
-# SAME tag serializes behind an in-flight run rather than cancelling it
-# (cancel-in-progress stays unset, so a publish in progress is never interrupted).
+# One run PER TAG, never cancelled: keyed by ref, not a constant — a constant
+# group keeps only the newest pending run, so pushing several tags at once
+# silently cancels the older releases. A re-push of the same tag serializes
+# behind the in-flight run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
-# Every run step is bash, explicitly: runner-OS shell defaults are a trap
-# (windows defaults to PowerShell), and explicit bash adds `-eo pipefail`.
-# Uniform across all canonical workflows so adding a runner never changes
-# what the steps mean.
+# Explicit bash: windows defaults to PowerShell, and bash brings -eo pipefail.
 defaults:
   run:
     shell: bash
@@ -65,8 +52,7 @@ jobs:
         uses: ./.github/actions/setup-aqua
 
       - name: Install pinned tools
-        # Link-only: tools download lazily on first use, checksum-verified —
-        # the job pays only for what the release recipe runs.
+        # Link-only: the job pays only for what the release recipe runs.
         run: aqua install --only-link
 
       - name: Release
