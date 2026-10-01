@@ -19,6 +19,8 @@ DEV_VERSION := '0.0.0'
 # The FIRST recipe defined here becomes `just`'s default.
 lint: do::lint::default
 fix: do::fix::default
+# The security workflow runs `just security`.
+security: do::security::default
 test: test-parity test-runtime test-bundle verify-bundle
 
 # -destination generic/platform=macOS keeps the build independent of the host

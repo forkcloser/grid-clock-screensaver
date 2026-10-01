@@ -53,12 +53,6 @@ race: (_banner "test go" "race")
     fi
     gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -ldflags=-linkmode=external -race ./...
 
-# Benchmarks, with allocation stats. -run '^$' deselects unit tests so only
-# benchmarks run — `just do test go` already covers the tests themselves.
-bench: (_banner "test go" "bench")
-    CGO_ENABLED="{{ go_cgo }}" \
-        go test -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -run '^$' -bench . -benchmem ./...
-
 # Every Fuzz* target for a short budget (TEST_GO_FUZZ_TIME, default 10s).
 # Driven by `go test -fuzz`, one target per invocation — only that build
 # compiles in the coverage counters. Targets come from -list, not grep, so
@@ -151,50 +145,3 @@ cover: (_banner "test go" "cover")
         fi
         echo "coverage ${total}% meets the ${min}% minimum"
     fi
-
-# CPU and memory profiles per package, pprof top-20 printed, PNG call graphs
-# via the pinned `dot` (forkcloser/dot: graphviz as a single Go binary — WASM
-# via wazero — tagged, which is what lets it be a tool directive that moves).
-# Informational: a failing package is still profiled past. Raw under
-# build/profiles/, PNG under build/profiles-docs/.
-profile: (_banner "test go" "profile") (_go-tool "dot" "github.com/forkcloser/dot/cmd/dot")
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export CGO_ENABLED="{{ go_cgo }}"
-    prof=build/profiles
-    docs=build/profiles-docs
-    mkdir -p "$prof" "$docs"
-    # Rendered from pprof's -dot text rather than pprof's own -png, which
-    # shells out to a dot it expects on PATH. -o with a pre-created file: under
-    # a sandbox the WASM runtime can overwrite files but not always create
-    # them. Paths stay cwd-relative for the same reason (the runtime preopens
-    # only the working directory).
-    render() {
-        src=$1; png=$2; shift 2
-        go tool pprof -dot -nodecount=20 "$@" "$src" > "$png.dot" 2>/dev/null
-        : > "$png"
-        build/tools/dot -Tpng -o "$png" "$png.dot"
-        rm -f "$png.dot"
-        echo "  -> $png"
-    }
-    for pkg in $(go list ./...); do
-        # One directory per package keyed by the FULL import path: flattening
-        # collides (example/a__b vs example/a/b, '_' being legal in import
-        # paths). Paths stay cwd-relative for the WASM dot (see render).
-        mkdir -p "$prof/$pkg" "$docs/$pkg"
-        echo "Profiling $pkg..."
-        go test -count=1 -o "$prof/$pkg/pkg.test" "$pkg" \
-            -cpuprofile "$prof/$pkg/cpu.prof" \
-            -memprofile "$prof/$pkg/mem.prof" || true
-        if [ -s "$prof/$pkg/cpu.prof" ]; then
-            echo "  CPU profile (top 20):"
-            go tool pprof -top -nodecount=20 "$prof/$pkg/cpu.prof" 2>/dev/null || true
-            render "$prof/$pkg/cpu.prof" "$docs/$pkg/cpu.png"
-        fi
-        if [ -s "$prof/$pkg/mem.prof" ]; then
-            echo "  Memory profile — alloc_space (top 20):"
-            go tool pprof -top -nodecount=20 -alloc_space "$prof/$pkg/mem.prof" 2>/dev/null || true
-            render "$prof/$pkg/mem.prof" "$docs/$pkg/alloc.png" -alloc_space
-        fi
-    done
-    echo "Profiles written to $prof/, diagrams to $docs/"

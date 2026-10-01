@@ -46,53 +46,53 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.5.2/limen_0.5.2_darwin_arm64.tar.gz",
-      "checksum": "2247B412DC06691F21409591F2E6685D200BEE11760B78AFC6CEA2D12777EB24",
+      "id": "github_release/github.com/farcloser/limen/v0.6.2/limen_0.6.2_darwin_arm64.tar.gz",
+      "checksum": "C8BF0BF9C6920A04F7A586368F2F761D404D8AC7975AB2F1B0C8955E1DA2B09C",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.5.2/limen_0.5.2_linux_amd64.tar.gz",
-      "checksum": "28EEB6C6891D01343C063EAC2CEFE7249A57C3D1030490315A17D8E63E8F5D3A",
+      "id": "github_release/github.com/farcloser/limen/v0.6.2/limen_0.6.2_linux_amd64.tar.gz",
+      "checksum": "ABD7E5FD6C3111B376566D2C57FD67F15A6CF8AE6C09DEF55E51BE8604FBF65D",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.5.2/limen_0.5.2_linux_arm64.tar.gz",
-      "checksum": "7B7A878F2A73C6778C013D6BCF1533E42BCEB062BF8B258703FF1375F36A3B26",
+      "id": "github_release/github.com/farcloser/limen/v0.6.2/limen_0.6.2_linux_arm64.tar.gz",
+      "checksum": "51DBA3330AC8A4AEA4E18AD0B0E02639E1064B15787F63561FA9A5FF77F9422E",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.5.2/limen_0.5.2_windows_amd64.tar.gz",
-      "checksum": "DD3E337F896332D227061DBAE4524EF68C3C4DC637DA5F0AB6108B15D6953B22",
+      "id": "github_release/github.com/farcloser/limen/v0.6.2/limen_0.6.2_windows_amd64.tar.gz",
+      "checksum": "1EF06E98477C6494B215D5FE62DB7024FBCC2A456B2B915C473712F3CDCF2746",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.5.2/limen_0.5.2_windows_arm64.tar.gz",
-      "checksum": "505D401D8497B3CD21162D8B51D9970416E58B46EB4599837F057CFBA6EBCBBC",
+      "id": "github_release/github.com/farcloser/limen/v0.6.2/limen_0.6.2_windows_arm64.tar.gz",
+      "checksum": "1DF1EC1A7D6053A3A154E58CF3B70EAD6ECA7BADCBFF7428FFE44157426B9992",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/golangci/golangci-lint/v2.14.0/golangci-lint-2.14.0-darwin-arm64.tar.gz",
-      "checksum": "5EF5F36A7147E91DC58EF9EF4D11BB7BAD5EAD0C76EB6C01327A73C641D1DCC3",
+      "id": "github_release/github.com/forkcloser/curl/v8.21.0/curl_8.21.0_darwin_arm64.tar.gz",
+      "checksum": "B2936D3902EC6ED96F9582C00616D2B033B5BB8EC5CB6330101D144482A56F85",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/golangci/golangci-lint/v2.14.0/golangci-lint-2.14.0-linux-amd64.tar.gz",
-      "checksum": "AB90AEB7B066F92A33415B638A50FE5344BBB75A0D32AD30CC248D88F81032AB",
+      "id": "github_release/github.com/forkcloser/curl/v8.21.0/curl_8.21.0_linux_amd64.tar.gz",
+      "checksum": "EC32B4B26F78F5AD98C64338DC29E67A3C61984E41A95B8792C77457D32DEF73",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/golangci/golangci-lint/v2.14.0/golangci-lint-2.14.0-linux-arm64.tar.gz",
-      "checksum": "EE7EC5F3453D15DDF106FAE5A4D6C71737712348A979D1FE9CD52EC7EA299BAE",
+      "id": "github_release/github.com/forkcloser/curl/v8.21.0/curl_8.21.0_linux_arm64.tar.gz",
+      "checksum": "841829B51F1F80FA05BB7382B25E0EBDD765325FA4F8B567461B4FCFB5653B5C",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/golangci/golangci-lint/v2.14.0/golangci-lint-2.14.0-windows-amd64.zip",
-      "checksum": "B15F903D1649283A2AB6E8D2F0C317EAF1F9F6B3763950E7E8B7E72A43DD724F",
+      "id": "github_release/github.com/forkcloser/curl/v8.21.0/curl_8.21.0_windows_amd64.tar.gz",
+      "checksum": "DCF632D027EC21B129D06C415C3C008D8DF241BC3516D43FC6B0327C6E35A087",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/golangci/golangci-lint/v2.14.0/golangci-lint-2.14.0-windows-arm64.zip",
-      "checksum": "6399496AEF883E5D2F77EA93E6E54FDD05BC2695F64071D8DE0B0579CAD92274",
+      "id": "github_release/github.com/forkcloser/curl/v8.21.0/curl_8.21.0_windows_arm64.tar.gz",
+      "checksum": "78EB1B53E55037111534CD2B87AD204DE04318A92C646554A78390BFB60E466F",
       "algorithm": "sha256"
     },
     {

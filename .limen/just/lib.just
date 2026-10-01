@@ -55,17 +55,40 @@ _per-platform +cmd:
 go_tool_build := "mkdir -p build/tools && GOOS='' GOARCH='' go -C tools build -o '../build/tools/'"
 
 # Every Go-built tool the recipes run — the Go-source analyzers and the rest
-# alike — is a `tool` directive in tools/go.mod, a module of its own, built
-# natively ONCE into build/tools/ by the pinned go (book/tooling.md, "Go-built
-# tools are go.mod tools"). Never `go tool <name>` from a per-platform leg.
-# A tools/go.mod without the directive fails with the recipe that adds it.
+# alike — is a `tool` directive in a module under tools/, built natively ONCE
+# into build/tools/ by the pinned go (book/tooling.md, "Go-built tools are
+# go.mod tools"). Never `go tool <name>` from a per-platform leg. Two homes:
+# tools/go.mod, shared by the small tools, and tools/<name>/go.mod for a tool
+# whose dependency graph must stay its upstream's exactly (golangci-lint:
+# minimal version selection across a shared module would lift its analyzers'
+# dependencies past what upstream tested). The isolated module wins when both
+# exist. A directive missing from both fails with the recipe that adds it.
 # Recipes depend on this with the tool's name and package, then call
 # build/tools/<name>.
 _go-tool name pkg:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! grep -qE '^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)' tools/go.mod 2>/dev/null; then
-        echo "tools/go.mod lacks 'tool {{ pkg }}' — add it: just do tools add {{ pkg }} (see book/tooling.md)" >&2
+    pattern='^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)'
+    if grep -qE "$pattern" 'tools/{{ name }}/go.mod' 2>/dev/null; then
+        mkdir -p build/tools && GOOS='' GOARCH='' go -C 'tools/{{ name }}' build -o '../../build/tools/' '{{ pkg }}'
+    elif grep -qE "$pattern" tools/go.mod 2>/dev/null; then
+        {{ go_tool_build }} '{{ pkg }}'
+    else
+        echo "neither tools/{{ name }}/go.mod nor tools/go.mod carries 'tool {{ pkg }}' — add it: just do tools add {{ pkg }} (see book/tooling.md)" >&2
         exit 1
     fi
-    {{ go_tool_build }} '{{ pkg }}'
+
+# The golangci-lint configuration the lint and fix recipes run: the baseline
+# limen-lint-go embeds with the project's .lint-go.yaml applied, rendered on
+# every run into build/ (gitignored) — so an edit to the overlay is live at
+# the next `just do lint go`, and nothing at the root invites a hand edit
+# (book/per-language.md, "one baseline, per-project carve-outs"). First the
+# floor: the baseline names linters, and a pinned golangci-lint older than the
+# release it is written for fails on a name it does not know; hence the
+# dependency on the golangci-lint build, whose binary it reads.
+# limen-lint-go ships in limen's release, on the hermetic PATH like limen;
+# LIMEN_LINT_GO_BIN is for the limen repository itself, which builds it from
+# its own tree (same idea as LIMEN_BIN in lint.just).
+_golangci-config:
+    ${LIMEN_LINT_GO_BIN:-limen-lint-go} check build/tools/golangci-lint
+    ${LIMEN_LINT_GO_BIN:-limen-lint-go} render -o build/golangci.yml
