@@ -25,7 +25,6 @@ packages:
   - name: golang/go@go1.27.1
   - name: casey/just@1.58.0
   - name: koalaman/shellcheck@v0.11.0
-  - name: golangci/golangci-lint@v2.14.0
   - name: google/yamlfmt@v0.21.0
   - name: lycheeverse/lychee@lychee-v0.24.2
   - name: goreleaser/goreleaser@v2.18.2
@@ -36,4 +35,6 @@ packages:
   - name: uutils/coreutils@0.12.0
     registry: local
   - name: quint-co/quint@v0.32.0 # renovate: depName=quint-co/quint
+    registry: local
+  - name: forkcloser/curl@v8.21.0
     registry: local

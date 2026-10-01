@@ -11,7 +11,7 @@ set quiet
 import 'lib.just'
 
 # --- Project tooling (see book/tooling.md). Every recipe takes the tool as it
-#     is pinned: an aqua slug exactly as in aqua.yaml (golangci/golangci-lint),
+#     is pinned: an aqua slug exactly as in aqua.yaml (goreleaser/goreleaser),
 #     or a Go package path exactly as in tools/go.mod
 #     (golang.org/x/tools/cmd/deadcode). ---
 #
@@ -53,7 +53,7 @@ add pkg: (_banner "tools" "add")
     aqua update-checksum --prune      # record its checksum (and drop stale ones)
     aqua install                      # REAL install: a bad pin fails here, not at first use
 
-# Set an existing tool to an exact version, e.g. `just do tools set golangci/golangci-lint v1.55.3`.
+# Set an existing tool to an exact version, e.g. `just do tools set goreleaser/goreleaser v2.0.0`.
 set pkg version: (_banner "tools" "set")
     #!/usr/bin/env bash
     set -euo pipefail
@@ -61,6 +61,16 @@ set pkg version: (_banner "tools" "set")
     esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
     first='{{ pkg }}'; first=${first%%/*}
     if [[ $first == *.* ]]; then
+        # An isolated module (tools/<name>/go.mod, see _go-tool in lib.just)
+        # holds the directive for the tool that builds as <name>.
+        pkg='{{ pkg }}'; name=${pkg##*/}
+        if [[ $name =~ ^v[0-9]+$ ]]; then name=${pkg%/*}; name=${name##*/}; fi
+        if grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" "tools/${name}/go.mod" 2>/dev/null; then
+            go -C "tools/${name}" get -tool '{{ pkg }}@{{ version }}'   # moves the pin
+            go -C "tools/${name}" mod tidy
+            mkdir -p build/tools && GOOS='' GOARCH='' go -C "tools/${name}" build -o '../../build/tools/' '{{ pkg }}'
+            exit 0
+        fi
         if ! grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
             echo "{{ pkg }} is not a tool directive in tools/go.mod — add it with 'just do tools add {{ pkg }}'." >&2
             exit 1
@@ -111,6 +121,16 @@ update command="": (_banner "tools" "update")
     # major suffix (github.com/google/go-licenses/v2 builds as go-licenses —
     # see _go-tool).
     name_of() { local n=${1##*/}; if [[ $n =~ ^v[0-9]+$ ]]; then n=${1%/*}; n=${n##*/}; fi; printf '%s' "$n"; }
+    # The isolated modules, tools/<name>/go.mod (see _go-tool in lib.just):
+    # one directive each, moved and rebuilt in their own module.
+    isolated_update() {
+        local dir=$1 p
+        p=$(awk '/^tool[[:blank:]]/ { print $2; exit }' "$dir/go.mod")
+        [ -n "$p" ] || return 0
+        go -C "$dir" get -tool "${p}@latest"
+        go -C "$dir" mod tidy
+        mkdir -p build/tools && GOOS='' GOARCH='' go -C "$dir" build -o '../../build/tools/' "$p"
+    }
     if [ -z '{{ command }}' ]; then
         aqua update                       # every package and the registries, to the latest
         aqua update-checksum --prune      # new checksums in, replaced versions' out
@@ -120,6 +140,13 @@ update command="": (_banner "tools" "update")
             go -C tools mod tidy
             {{ go_tool_build }} "${pkgs[@]}"              # REAL build of every directive
         fi
+        for m in tools/*/go.mod; do
+            [ -f "$m" ] && isolated_update "${m%/go.mod}"
+        done
+        exit 0
+    fi
+    if [ -f 'tools/{{ command }}/go.mod' ]; then
+        isolated_update 'tools/{{ command }}'
         exit 0
     fi
     # ${pkgs[@]+…}: under set -u, bash 3 treats an empty array as unset.
@@ -143,15 +170,21 @@ remove pkg: (_banner "tools" "remove")
     esc=$(printf '%s' '{{ pkg }}' | sed 's/[.^$*+?()[{}|]/\\&/g')
     first='{{ pkg }}'; first=${first%%/*}
     if [[ $first == *.* ]]; then
+        # The built binary, named as go names it: last element, /vN stripped.
+        pkg='{{ pkg }}'; name=${pkg##*/}
+        if [[ $name =~ ^v[0-9]+$ ]]; then name=${pkg%/*}; name=${name##*/}; fi
+        # An isolated module (tools/<name>/go.mod) is the tool's alone: it
+        # goes as a whole, go.sum included.
+        if grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" "tools/${name}/go.mod" 2>/dev/null; then
+            rm -rf "tools/${name}" "build/tools/${name}" "build/tools/${name}.exe"
+            exit 0
+        fi
         if ! grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
             echo "{{ pkg }} is not a tool directive in tools/go.mod — nothing to remove." >&2
             exit 1
         fi
         go -C tools get -tool '{{ pkg }}@none'   # drops the directive
         go -C tools mod tidy                     # and the requirements only it needed
-        # The built binary, named as go names it: last element, /vN stripped.
-        pkg='{{ pkg }}'; name=${pkg##*/}
-        if [[ $name =~ ^v[0-9]+$ ]]; then name=${pkg%/*}; name=${name##*/}; fi
         rm -f "build/tools/${name}" "build/tools/${name}.exe"
         exit 0
     fi
