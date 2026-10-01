@@ -129,7 +129,9 @@ shell: (_banner "lint" "shell")
     # byte and splits its own record. The tr is load-bearing: native windows
     # jq writes CRLF. Every record after the first starts with the newline jq
     # prints after the separator. ':' is illegal in windows filenames; the
-    # name is only a label, so module separators are flattened.
+    # name is only a label, so module separators are flattened. The directory
+    # reaches awk through ENVIRON, never -v: -v processes escapes, and a
+    # windows temp path's backslashes are eaten (\l becomes l).
     while IFS= read -r name; do recipes+=("$tmpdir/$name"); done < <(
         printf '%s' "$dump" | jq -r '
             def recipes_of(prefix):
@@ -140,7 +142,7 @@ shell: (_banner "lint" "shell")
                     | prefix + .key, ($lines | join("\n")), ([30] | implode)),
                 ((.modules // {}) | to_entries[]
                     | .key as $mod | .value | recipes_of(prefix + $mod + "::"));
-            recipes_of("")' | tr -d '\r' | awk -v dir="$tmpdir" '
+            recipes_of("")' | tr -d '\r' | LINT_SHELL_DIR="$tmpdir" awk '
             BEGIN { RS = "\036" }
             {
                 sub(/^\n/, "")
@@ -148,7 +150,7 @@ shell: (_banner "lint" "shell")
                 if (n == 0) next
                 name = substr($0, 1, n - 1)
                 gsub(/:/, "_", name)
-                out = dir "/" name
+                out = ENVIRON["LINT_SHELL_DIR"] "/" name
                 printf "%s", substr($0, n + 1) > out
                 close(out)
                 print name
@@ -166,14 +168,43 @@ links: (_banner "lint" "links")
     #!/usr/bin/env bash
     set -euo pipefail
     # Canonical exclusions (and their rationale) live in .limen/lychee.toml; a
-    # repository adds its own in a root .lychee.toml. Both must be passed
+    # repository adds its own in a root .lint-links.toml. Both must be passed
     # explicitly — any --config disables lychee's ./lychee.toml auto-discovery —
     # and lychee merges them, concatenating the exclude lists.
     args=(--config .limen/lychee.toml)
-    if [ -f .lychee.toml ]; then
-        args+=(--config .lychee.toml)
+    if [ -f .lint-links.toml ]; then
+        args+=(--config .lint-links.toml)
     fi
-    lychee --no-progress "${args[@]}" .
+    # WORKAROUND, lychee through 0.24.2 (lychee-lib/src/retry.rs): a rejected
+    # status is judged retryable only when it is 429, so a 5xx is never
+    # retried whatever max_retries says, and one GitHub 503 blip fails the
+    # lane. Server errors alone get a second pass, re-checked once a minute
+    # later; any other failure is a finding at once. Drop this when lychee
+    # retries 5xx itself.
+    scratch=$(mktemp -d "${TMPDIR:-/tmp}/lint-links.XXXXXX")
+    trap 'rm -rf "$scratch"' EXIT
+    report="$scratch/report.json"
+    status=0
+    lychee --no-progress "${args[@]}" --format json --output "$report" . || status=$?
+    if [ "$status" = 0 ]; then
+        jq -r '"\(.total) links: \(.successful) ok, \(.excludes) excluded, \(.redirects) redirected"' "$report"
+        exit 0
+    fi
+    # 2 is "links failed"; anything else (a config or input error) is final.
+    [ "$status" = 2 ] || exit "$status"
+    jq -r '(.error_map, .timeout_map) | to_entries[] | .key as $file | .value[]
+        | "[\(.status.code // "timeout")] \(.url) (\($file):\(.span.line // 0)) | \(.status.text)"' "$report"
+    servers=$(jq '[.error_map[][] | select(.status.code != null and .status.code >= 500 and .status.code < 600)] | length' "$report")
+    failures=$(jq '[.error_map[][], .timeout_map[][]] | length' "$report")
+    if [ "$servers" = 0 ] || [ "$servers" != "$failures" ]; then
+        exit 2
+    fi
+    # The links go back in as a document: a URL given as an input is a page to
+    # read links out of, not a link to check.
+    jq -r '[.error_map[][] | .url] | unique[] | "<\(.)>"' "$report" > "$scratch/recheck.md"
+    echo "only server errors, which lychee does not retry: re-checking $(wc -l < "$scratch/recheck.md" | tr -d ' ') link(s) once, in 60s" >&2
+    sleep 60
+    lychee --no-progress "${args[@]}" "$scratch/recheck.md"
 
 # Validate commit hygiene — DCO sign-off, subject length, dangling whitespace —
 # over a commit range (default: everything ahead of the upstream default branch;
