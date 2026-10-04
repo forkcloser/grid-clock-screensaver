@@ -60,7 +60,7 @@ so no saver can work around it. Documented first in
 ## Tooling
 
 The repository follows [limen](https://github.com/farcloser/limen): every tool
-except Xcode is pinned in `aqua.yaml` and checksum-verified, and the commands
+except Xcode is pinned in `.aqua/aqua.yaml` and checksum-verified, and the commands
 are the ones CI runs.
 
 ```sh
