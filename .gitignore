@@ -24,7 +24,6 @@ Desktop.ini
 *.local
 _scratch/
 WIP_*
-/tmp
 /target/
 **/*.rs.bk
 *.pdb
@@ -36,3 +35,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Required by limen (book/mandatory-files.md, ".gitignore").
+.claude

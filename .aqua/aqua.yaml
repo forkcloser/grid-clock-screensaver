@@ -1,0 +1,23 @@
+# aqua — Declarative CLI Version Manager — https://aquaproj.github.io/
+checksum:
+  enabled: true
+  require_checksum: true
+  supported_envs:
+    - darwin/arm64
+    - linux/amd64
+    - linux/arm64
+    - windows/amd64
+    - windows/arm64
+
+registries:
+  - type: standard
+    ref: v4.570.0 # renovate: depName=aquaproj/aqua-registry
+  - name: local
+    type: local
+    path: ../.limen/aqua-registry.yaml
+
+packages:
+  # --- farcloser tools (local registry; standard once registered upstream) ---
+  - name: farcloser/limen@v0.7.0 # renovate: depName=farcloser/limen
+    registry: local
+  - import: ../.limen/aqua.yaml
