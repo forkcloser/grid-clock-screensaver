@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # goreleaser — https://goreleaser.com — release automation for Grid Clock.
 # Local dry-run: `just do release --local --dry-run` (no tag, no publish, artifacts
 # under build/release/). Real release: `just do release vX.Y.Z` (see .limen/just/release.just).
