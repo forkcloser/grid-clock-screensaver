@@ -95,8 +95,10 @@ shell: (_banner "lint" "shell")
     # of milliseconds, and a head and a grep per file made this recipe six
     # times slower on windows than on linux. The loop below is builtins only,
     # and one awk per hundred candidates (windows caps a command line at 32K)
-    # reads their first lines. No \b in awk regexes — the word boundary is
-    # spelled out. Every list goes through a file in the scratch directory
+    # reads their first lines, in the C locale: the candidates include binaries,
+    # and macOS awk in a UTF-8 locale dies on their first bytes ("towc:
+    # multibyte conversion failure"). No \b in awk regexes — the word boundary
+    # is spelled out. Every list goes through a file in the scratch directory
     # (see `lint just`), under a dot-name no recipe body below can take.
     # mktemp gets an explicit template: macOS ignores $TMPDIR.
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lint-shell.XXXXXX")
@@ -113,7 +115,7 @@ shell: (_banner "lint" "shell")
         candidates+=("$f")
     done < "$tmpdir/.files"
     for ((i = 0; i < ${#candidates[@]}; i += 100)); do
-        awk '
+        LC_ALL=C awk '
             FNR == 1 {
                 # %c with 0, not "\0" in the format: a NUL inside an awk
                 # string ends it, and the names would run together unterminated.
