@@ -8,6 +8,8 @@ pipeline refuses to cut a version that has no section here
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-05
+
 ### Changed
 
 - Licensing: upstream's author granted a licence to reproduce and distribute
