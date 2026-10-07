@@ -136,6 +136,6 @@ shasum -a 256 -c checksums.txt   # the archive and install.sh
 `just do release vX.Y.Z` verifies a clean tree, creates a signed tag and pushes
 it. The tag push triggers the release workflow: build on a macOS runner with
 the tag as the bundle's version, `verify-bundle`, keyless cosign signature on
-`checksums.txt`, GitHub release. Release notes are the version's section in
-[`CHANGELOG.md`](./CHANGELOG.md), written beforehand; a version without one
-does not release. Pushing `v*` tags is restricted by a repository ruleset.
+`checksums.txt`, GitHub release, whose notes GitHub writes from the pull
+requests merged since the previous tag. Pushing `v*` tags is restricted by a
+repository ruleset.
