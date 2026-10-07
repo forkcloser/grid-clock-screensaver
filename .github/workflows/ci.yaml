@@ -56,11 +56,6 @@ jobs:
       - name: Install aqua (pinned, checksum-verified)
         uses: ./.github/actions/setup-aqua
 
-      # Not here: turning Defender's real-time scan off. Tried on the windows
-      # legs, before the caches, and measured neutral twice against the same
-      # commit without it — the slowness is process creation and small-file
-      # writes under git-bash, not the scanner.
-
       # aqua's package store, keyed on the exact pins and per architecture
       # (the store holds native binaries). A warm store turns every lazy first
       # use below into a link; the fallback key keeps the tools a pin bump did
