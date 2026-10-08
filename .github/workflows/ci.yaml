@@ -1,9 +1,11 @@
-# Diverges from limen's canonical ci.yaml: macOS-only matrix and tools job, no
-# fuzz job (no Go code to fuzz). Keep everything else in sync.
+# Seeded once by `limen fix`, then the project's own: limen never updates it.
+# The shared lanes (verify on every platform, fuzz, tools) live in
+# limen-verify.yaml, content-pinned and kept current by `limen fix`; this file
+# calls them, adds the project's own jobs, and gates on all of them.
 #
-# Minimal glue: GitHub's own actions pinned by
-# SHA, aqua at .aqua/aqua.yaml's pins, `just` running the recipes a laptop runs. No
-# third-party actions, hence no egress-filtering action either.
+# macOS only: `just test` needs xcodebuild and loads the bundle into a host
+# process; arm64 only, the bundle has no x86_64 slice (darwin/amd64 is
+# unsupported org-wide). The fuzz lane passes on a tree with no Go module.
 name: ci
 
 on:
@@ -21,142 +23,36 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Explicit bash everywhere: windows defaults to PowerShell and never sees
-# git-bash's environment; explicit bash also brings -eo pipefail.
-defaults:
-  run:
-    shell: bash
-
 jobs:
-  verify:
-    strategy:
-      fail-fast: false
-      matrix:
-        # Pinned images, never -latest. macOS only: `just test` needs
-        # xcodebuild and loads the bundle into a host process. arm64 only: the
-        # bundle has no x86_64 slice (darwin/amd64 is unsupported org-wide).
-        # These names are NOT the ruleset's required contexts — `gate` is, so
-        # this list can change freely.
-        os: [macos-15]
-    runs-on: ${{ matrix.os }}
-    # Generous: xcodebuild dominates, and the macOS runners are not fast.
-    timeout-minutes: 45
+  limen:
+    uses: ./.github/workflows/limen-verify.yaml
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # The token is not left behind in .git/config: nothing in this
-          # workflow talks to GitHub after checkout.
-          persist-credentials: false
-          # Full history and refs: `just do lint commits` validates the commit
-          # range against the PR's base branch, which a shallow clone lacks.
-          fetch-depth: 0
-
-      - name: Install aqua (pinned, checksum-verified)
-        uses: ./.github/actions/setup-aqua
-
-      # aqua's package store, keyed on the exact pins and per architecture
-      # (the store holds native binaries). A warm store turns every lazy first
-      # use below into a link; the fallback key keeps the tools a pin bump did
-      # not touch, and the changed one downloads and verifies as before.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ env.AQUA_ROOT_DIR }}/pkgs
-          key: aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.aqua/aqua.yaml', '.aqua/aqua-checksums.json', '.limen/aqua-registry.yaml') }}
-          restore-keys: |
-            aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Install pinned tools
-        # Link-only: tools download lazily on first use, checksum-verified; a
-        # job pays only for what its recipes run.
-        run: aqua install --only-link
-
-      # The Go build and module caches, plus the linter's (build/cache/, see
-      # main.just). The per-platform analysis legs compile the whole module
-      # graph five times, cold, on every run without this. Paths come from the
-      # pinned go itself — they differ per OS — and the key carries its version
-      # and every go.sum; a stale restore is harmless (the build cache is
-      # content-addressed, the module cache is checksum-verified), so the
-      # fallback key is always worth taking.
-      - id: gocache
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-          echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ${{ steps.gocache.outputs.build }}
-            ${{ steps.gocache.outputs.mod }}
-            build/cache
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-
-            go-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Lint
-        run: just lint
-
-      - name: Test
-        run: just test
-
-  # Every pin resolves. The verify legs link only, and a link verifies
-  # nothing: an asset that is missing from a release, or that fails its
-  # checksum, would merge green and fail at first use. One linux leg pays for
-  # the real install; aqua's package store is cached on the exact pins, so a
-  # warm key costs seconds and a changed pin is always a real install. (The
-  # Go-built tools are tools/go.mod directives, built by the verify legs.)
-  tools:
-    # macOS, not the canonical ubuntu-24.04: the pins that matter are the ones
-    # the macOS verify and release jobs install.
-    runs-on: macos-15
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install aqua (pinned, checksum-verified)
-        uses: ./.github/actions/setup-aqua
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ env.AQUA_ROOT_DIR }}/pkgs
-          # The same key as the verify legs', so this job and the linux leg
-          # share one store — and no fallback key here: a changed pin must be
-          # a real install, which is what this job exists to prove.
-          key: aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.aqua/aqua.yaml', '.aqua/aqua-checksums.json', '.limen/aqua-registry.yaml') }}
-
-      - name: Install every pinned tool
-        run: aqua install
+    with:
+      os: '["macos-15"]'
 
   # The ONE required status check (defaultRequiredChecks in
-  # internal/github/audit.go). Requiring the matrix legs by name would bake
-  # this runner list into every ruleset; this job collapses the matrix to one
-  # stable name.
+  # internal/github/audit.go). Requiring the lanes by name would bake the
+  # runner list into every ruleset; this job collapses them to one stable
+  # name. A project job joins `needs` and the assertion below.
   gate:
-    needs: [verify, tools]
+    needs: [limen]
     # always(), and the result asserted explicitly. Without always() a failed
     # or cancelled dependency SKIPS this job instead of failing it, and a
     # skipped required check does not block a merge — branch protection that
-    # quietly stops protecting. `needs.verify.result` is success only when
-    # every matrix leg succeeded; tools is asserted alongside so a pin that
-    # does not install blocks a merge the same way a failing test does.
+    # quietly stops protecting. `needs.limen.result` is success only when
+    # every lane it ran succeeded: each verify leg, fuzz and tools.
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Every verify leg and tools succeeded
+      - name: Every lane succeeded
         env:
           # Via env, never interpolated into the script: the shell sees data,
           # not something the expression layer can rewrite into code.
-          RESULT: ${{ needs.verify.result }}
-          RESULT_TOOLS: ${{ needs.tools.result }}
+          RESULT: ${{ needs.limen.result }}
+        shell: bash
         run: |
-          printf 'verify: %s\n' "$RESULT"
-          printf 'tools: %s\n' "$RESULT_TOOLS"
-          [ "$RESULT" = "success" ] && [ "$RESULT_TOOLS" = "success" ]
+          printf 'limen: %s\n' "$RESULT"
+          [ "$RESULT" = "success" ]
