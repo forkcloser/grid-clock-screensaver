@@ -20,4 +20,5 @@ packages:
   # --- farcloser tools (local registry; standard once registered upstream) ---
   - name: farcloser/limen@v0.10.0 # renovate: depName=farcloser/limen
     registry: local
+  - name: golang/go@go1.27.2
   - import: ../.limen/aqua.yaml
