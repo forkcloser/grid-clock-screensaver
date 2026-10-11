@@ -36,8 +36,9 @@ Settings thumbnail to a 6K display.
   one saver process per display, so it has no coherent meaning. An existing
   *all screens* preference migrates; *last focused* becomes *main display
   only*. Preferences moved from `com.chrstphrknwtn.grid-clock` to
-  `world.farcloser.grid-clock`; 1.0 copies the display setting across on first
-  launch.
+  `world.farcloser.grid-clock` in 1.0, which copied the display setting across
+  on first launch, and to `org.forkcloser.grid-clock` in 1.1, which copies the
+  display and brightness settings from 1.0's domain the same way.
 - **Removed:** `Webview/` and `ConfigureSheet.xib` (the sheet is built in
   code; the xib used `+[NSBundle loadNibNamed:owner:]`, deprecated since
   10.8).
