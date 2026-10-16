@@ -27,18 +27,11 @@ Settings thumbnail to a 6K display.
 
 ## Differences from upstream
 
-- **Brightness option.** 5–100 %, a multiplier on the two grey levels. The
-  idea is from [chrstphrknwtn/grid-clock-screensaver#16](https://github.com/chrstphrknwtn/grid-clock-screensaver/pull/16),
-  done there as CSS opacity.
-- **Font sizing** off the cell, replacing upstream's viewport units and the
-  media query that protected the System Settings thumbnail.
-- **Display options.** "Last focused screen" dropped: macOS 14 and later run
-  one saver process per display, so it has no coherent meaning. An existing
-  *all screens* preference migrates; *last focused* becomes *main display
-  only*. Preferences moved from `com.chrstphrknwtn.grid-clock` to
-  `world.farcloser.grid-clock` in 1.0, which copied the display setting across
-  on first launch, and to `org.forkcloser.grid-clock` in 1.1, which copies the
-  display and brightness settings from 1.0's domain the same way.
+What the fork changes for a user, the native rendering, the brightness option,
+the display options and the bundle identifier with its preference migrations,
+is the table in [`UPSTREAM.md`](./UPSTREAM.md). What changed in the project
+itself:
+
 - **Removed:** `Webview/` and `ConfigureSheet.xib` (the sheet is built in
   code; the xib used `+[NSBundle loadNibNamed:owner:]`, deprecated since
   10.8).

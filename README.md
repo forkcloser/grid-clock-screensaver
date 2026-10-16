@@ -76,8 +76,9 @@ rm -f ~/Library/Preferences/ByHost/world.farcloser.grid-clock.*.plist
 A fork of [chrstphrknwtn/grid-clock-screensaver](https://github.com/chrstphrknwtn/grid-clock-screensaver),
 whose `WebView` rendering stopped working on macOS 14. This port draws the
 clock natively with Core Text; the bundle loads nothing at runtime. The clock
-is the same one, checked against the original for every minute of the day, plus
-a brightness option. Details, build, tests and releases:
+is the same one, checked against the original for every minute of the day.
+What the fork adds and changes for a user is the table in
+[`UPSTREAM.md`](./UPSTREAM.md); build, tests and releases are in
 [DEVELOPMENT.md](./DEVELOPMENT.md).
 
 ## Reporting
