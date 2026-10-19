@@ -14,11 +14,11 @@ registries:
     ref: v4.575.0 # renovate: depName=aquaproj/aqua-registry
   - name: local
     type: local
-    path: ../.limen/aqua-registry.yaml
+    path: ../.limen/hermetic-registry.yaml
 
 packages:
   # --- farcloser tools (local registry; standard once registered upstream) ---
-  - name: farcloser/limen@v0.13.0 # renovate: depName=farcloser/limen
+  - name: farcloser/limen@v0.14.0 # renovate: depName=farcloser/limen
     registry: local
   - name: golang/go@go1.27.2
-  - import: ../.limen/aqua.yaml
+  - import: ../.limen/hermetic.yaml

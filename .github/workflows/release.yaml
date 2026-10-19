@@ -49,12 +49,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Install aqua (pinned, checksum-verified)
-        uses: ./.github/actions/setup-aqua
-
-      - name: Install pinned tools
-        # Link-only: the job pays only for what the release recipe runs.
-        run: aqua install --only-link
+      - name: Install hermetic (pinned, verified)
+        uses: ./.github/actions/setup-hermetic
 
       - name: Release
         env:
