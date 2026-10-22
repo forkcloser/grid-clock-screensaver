@@ -17,7 +17,7 @@ require (
 	github.com/forkcloser/dot v1.3.1 // indirect
 	github.com/forkcloser/git-validation v0.1.1 // indirect
 	github.com/forkcloser/go-graphviz v0.5.2 // indirect
-	github.com/forkcloser/godolint v0.5.0 // indirect
+	github.com/forkcloser/godolint v0.5.1 // indirect
 	github.com/lmittmann/tint v1.2.1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/moby/buildkit v0.34.0 // indirect

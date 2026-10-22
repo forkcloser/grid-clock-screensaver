@@ -12,8 +12,8 @@ github.com/forkcloser/git-validation v0.1.1 h1:A1FkfOHKgkqCC21/DSTjYlY7IlvbRtnvF
 github.com/forkcloser/git-validation v0.1.1/go.mod h1:zbgYV4hwcvnhWsO/G7rfVEJDTOKmj71FZcyn/f9FP08=
 github.com/forkcloser/go-graphviz v0.5.2 h1:mtZGeDipgCb+UvnkKasn5NGzRZc9tDQBpayMbBkNqkI=
 github.com/forkcloser/go-graphviz v0.5.2/go.mod h1:LPwbeLn2JeZaoM82ooQOdhghZWX7rfKGo1694ipcs00=
-github.com/forkcloser/godolint v0.5.0 h1:7cpRHcKJO1cRm2XNXQKnrx4+Lg7/qVEc13qRYKOQeBg=
-github.com/forkcloser/godolint v0.5.0/go.mod h1:mZ5IAPRMGCzUKyB3AUqkh4HllLslQutpmMTTkEEIep8=
+github.com/forkcloser/godolint v0.5.1 h1:hLfaabqsdaWFruEqQijUd4hwI+uNISL24LKOrlIolk4=
+github.com/forkcloser/godolint v0.5.1/go.mod h1:cev6BNLOrnT1khxHkC6G3jS0nFH9tkZHnbLsLBq0qNw=
 github.com/go-quicktest/qt v1.102.0 h1:HSQxCeh5YZH3EL3W39ixjtyaEhcWSXQHtHnMBzSs474=
 github.com/go-quicktest/qt v1.102.0/go.mod h1:p4lGIVX+8Wa6ZPNDvqcxq36XpUDLh42FLetFU7odllI=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
