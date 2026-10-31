@@ -31,7 +31,8 @@ test: test-parity test-runtime test-bundle verify-bundle
 # would undercount) is refused rather than shipped. The signature is ad hoc
 # (the project's "-") unless GRID_CLOCK_SIGN_IDENTITY names an identity, the
 # release workflow's Developer ID Application; that one is timestamped, as
-# notarization requires.
+# notarization requires, and signed under GRID_CLOCK_SIGN_TEAM, the team
+# manual signing asks for beside the identity (the project pins none).
 [doc('Build the .saver bundle (configuration: Release or Debug; version: what the bundle claims to be)')]
 build configuration='Release' version=DEV_VERSION:
     #!/usr/bin/env bash
@@ -43,12 +44,16 @@ build configuration='Release' version=DEV_VERSION:
     build_number=$(git rev-list --count HEAD)
     identity="${GRID_CLOCK_SIGN_IDENTITY:--}"
     flags=""
-    [ "$identity" = "-" ] || flags="--timestamp"
+    team=""
+    if [ "$identity" != "-" ]; then
+        flags="--timestamp"
+        team="${GRID_CLOCK_SIGN_TEAM:?GRID_CLOCK_SIGN_TEAM is unset: a signing identity needs its team}"
+    fi
     xcodebuild -project '{{ XCODE_PROJECT }}' -scheme '{{ XCODE_SCHEME }}' \
         -configuration '{{ configuration }}' -destination 'generic/platform=macOS' \
         -derivedDataPath build \
         MARKETING_VERSION='{{ version }}' CURRENT_PROJECT_VERSION="$build_number" \
-        CODE_SIGN_IDENTITY="$identity" OTHER_CODE_SIGN_FLAGS="$flags" \
+        CODE_SIGN_IDENTITY="$identity" OTHER_CODE_SIGN_FLAGS="$flags" DEVELOPMENT_TEAM="$team" \
         build
     echo "built build/Build/Products/{{ configuration }}/{{ SAVER }} ({{ version }}, build $build_number, signed by $identity)"
 

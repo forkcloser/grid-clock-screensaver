@@ -135,8 +135,9 @@ shasum -a 256 -c checksums.txt   # the archive and install.sh
 
 `just do release vX.Y.Z` verifies a clean tree, creates a signed tag and pushes
 it. The tag push triggers the release workflow: the Developer ID certificate
-is imported into a keychain made for the job, the bundle is built on a macOS
-runner with the tag as its version and signed with that identity,
+is imported into a keychain made for the job and its team id read off the
+identity's name, the bundle is built on a macOS runner with the tag as its
+version and signed with that identity under that team,
 `verify-bundle` asserts the signature is the identity's and timestamped,
 `notarize` submits the bundle with `notarytool` and staples the ticket, then
 the keyless cosign signature on `checksums.txt`, the GitHub release, whose

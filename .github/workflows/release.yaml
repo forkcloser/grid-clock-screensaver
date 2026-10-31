@@ -85,9 +85,17 @@ jobs:
           rm -f "$RUNNER_TEMP/identity.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application" || {
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -n 1)"
+          [ -n "$identity" ] || {
             echo "no Developer ID Application identity in the imported certificate" >&2; exit 1; }
+          # xcodebuild's manual signing wants the team as well as the
+          # identity; it is the ten characters in the identity's name,
+          # read from the certificate rather than written into the project,
+          # which pins no team so that a local build stays ad hoc.
+          team="$(printf '%s' "$identity" | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p')"
+          [ -n "$team" ] || { echo "no team id in the identity's name: $identity" >&2; exit 1; }
           echo "GRID_CLOCK_SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
+          echo "GRID_CLOCK_SIGN_TEAM=$team" >> "$GITHUB_ENV"
 
       # Project step: the App Store Connect API key notarytool submits with,
       # written where the notarize recipe reads it and removed at the end.
