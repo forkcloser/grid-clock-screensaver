@@ -80,10 +80,10 @@ release:
   # assets a previous partial attempt already uploaded instead of 422-ing on
   # "already_exists".
   replace_existing_artifacts: true
-  # The install one-liner is repeated where a visitor lands; the notes below
-  # it are GitHub's, from the pull requests merged since the previous tag.
+  # The notes below the header are GitHub's, from the pull requests merged
+  # since the previous tag.
   header: |
-    Install (macOS 14+, Apple silicon; verifies the release with cosign first):
+    macOS 15 or later, Apple silicon. Download `grid-clock_{{ .Version }}_arm64.zip` below, unzip it and double-click `Grid Clock.saver`. Or from a terminal:
 
     ```sh
     curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/download/{{ .Tag }}/install.sh | bash

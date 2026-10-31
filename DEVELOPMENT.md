@@ -9,9 +9,7 @@ renders inside an ordinary app. Rather than move to `WKWebView` and stay
 exposed to the same class of breakage, this fork draws the clock with Core
 Text. No HTML, JavaScript, web engine or file access at runtime.
 
-The minimum is macOS 14 because that is where upstream broke; on macOS 13 and
-earlier the original works. macOS 14 is the declared minimum but is not
-exercised by CI, which runs on macOS 15.
+The minimum is macOS 15, the oldest release Apple supports; CI runs on it.
 
 ## How it works
 
@@ -90,7 +88,7 @@ one (`just build Release 1.2.3`).
   (`NSBundle` → `principalClass`), renders a frame offscreen, and checks it
   looks like a lit grid on black.
 - `just verify-bundle` asserts what the built bundle is: version, bundle
-  identifier, arm64 only, macOS 14.0 minimum, an intact ad-hoc signature with
+  identifier, arm64 only, macOS 15.0 minimum, an intact ad-hoc signature with
   the hardened runtime. The release runs it before packaging.
 
 ## Installer verification

@@ -23,7 +23,7 @@ adapted to the fork; nothing is merged from upstream.
 
 | Change | Here |
 | --- | --- |
-| The clock is drawn natively with Core Text; the bundle loads no HTML, JavaScript or web engine at runtime (upstream's `WebView` stopped drawing on macOS 14, the fork's minimum) | [`ae86059`](https://github.com/forkcloser/grid-clock-screensaver/commit/ae86059) |
+| The clock is drawn natively with Core Text; the bundle loads no HTML, JavaScript or web engine at runtime (upstream's `WebView` stopped drawing on macOS 14) | [`ae86059`](https://github.com/forkcloser/grid-clock-screensaver/commit/ae86059) |
 | Font sizing off the cell, replacing upstream's viewport units; the "last focused screen" display option is gone, since macOS 14 runs one saver per display: an existing "last focused" preference becomes "main display only" and "all screens" migrates as it is | [`ae86059`](https://github.com/forkcloser/grid-clock-screensaver/commit/ae86059) |
 | Brightness option, 5 to 100 %, a multiplier on the two grey levels | [`1b01324`](https://github.com/forkcloser/grid-clock-screensaver/commit/1b01324) |
 | The bundle carries its own version and build number, checked on the built product; the installer verifies the release's signed checksums before it fetches | https://github.com/forkcloser/grid-clock-screensaver/pull/9 |
