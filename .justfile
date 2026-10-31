@@ -149,7 +149,7 @@ test-parity:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p build/test
-    clang -fobjc-arc -O0 -Werror \
+    clang -fobjc-arc -O0 -Werror -Wconversion \
         -framework Cocoa -framework CoreText -framework ScreenSaver \
         -o build/test/parity test/parity.m
     build/test/parity > build/test/parity.txt
@@ -168,7 +168,7 @@ test-runtime:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p build/test
-    clang -fobjc-arc -O0 -Werror \
+    clang -fobjc-arc -O0 -Werror -Wconversion \
         -framework Cocoa -framework CoreText -framework ScreenSaver \
         -o build/test/runtime test/runtime.m
     build/test/runtime
@@ -178,7 +178,7 @@ test-bundle configuration='Release': (build configuration DEV_VERSION)
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p build/test
-    clang -fobjc-arc -O0 -Werror \
+    clang -fobjc-arc -O0 -Werror -Wconversion \
         -framework Cocoa -framework ScreenSaver \
         -o build/test/load test/load.m
     build/test/load "build/Build/Products/{{ configuration }}/{{ SAVER }}" build/test/render.png
