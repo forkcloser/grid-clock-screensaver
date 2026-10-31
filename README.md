@@ -65,17 +65,17 @@ Arrange displays side by side as the workaround.
 ## Uninstall
 
 ```sh
-just uninstall            # or: rm -rf ~/Library/'Screen Savers'/'Grid Clock.saver'
+rm -rf ~/Library/'Screen Savers'/'Grid Clock.saver'
+# a --system install:
+sudo rm -rf /Library/'Screen Savers'/'Grid Clock.saver'
 ```
 
-Preferences are left behind; to clear them:
+From a clone, `just uninstall` does the first. Preferences are left behind; to
+clear them:
 
 ```sh
 defaults -currentHost delete org.forkcloser.grid-clock
 rm -f ~/Library/Preferences/ByHost/org.forkcloser.grid-clock.*.plist
-# and, from 1.0.0 or earlier:
-defaults -currentHost delete world.farcloser.grid-clock
-rm -f ~/Library/Preferences/ByHost/world.farcloser.grid-clock.*.plist
 ```
 
 ## About this fork
