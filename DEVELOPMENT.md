@@ -33,8 +33,8 @@ itself:
 - **Removed:** `Webview/` and `ConfigureSheet.xib` (the sheet is built in
   code; the xib used `+[NSBundle loadNibNamed:owner:]`, deprecated since
   10.8).
-- **Project file rebuilt:** modern object version, warning-clean under the
-  current warning set, distinct Debug and Release settings, arm64-only, hardened
+- **Project file rebuilt:** modern object version, warnings are errors under
+  the current warning set, distinct Debug and Release settings, arm64-only, hardened
   runtime, a checked-in shared scheme, `Info.plist` generated from build
   settings.
 
