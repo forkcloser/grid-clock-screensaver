@@ -95,18 +95,24 @@ one (`just build Release 1.2.3`).
 
 ## Installer verification
 
-The bundle is ad-hoc signed; there is no Apple Developer ID. macOS loads an
-ad-hoc signed plug-in into `legacyScreenSaver` (it carries
-`com.apple.security.cs.disable-library-validation`), but Gatekeeper refuses to
-run it while it carries the quarantine attribute a download gets. The installer
-clears that attribute only after establishing trust:
+A released bundle is signed with Forkcloser's Developer ID Application
+identity, hardened runtime and timestamp, notarized by Apple and stapled with
+its ticket, as the signing and provenance policy asks of a bundle a human
+installs through System Settings (limen's `book/releasing.md`). Gatekeeper
+therefore accepts a downloaded release as it accepts any notarized app, and
+nothing strips the quarantine attribute. A local build is ad hoc signed and
+loads from `~/Library/Screen Savers` without going through Gatekeeper. The
+installer establishes trust in this order:
 
 1. **cosign** verifies `checksums.txt` against the release workflow's keyless
    signature: the identity is this repository's `release.yaml` at a `v*` tag,
    certified by Fulcio and recorded in Rekor. No key exists to be stolen.
 2. The bundle's SHA-256 is checked against that file.
-3. The archive is expanded, de-quarantined, installed, and the bundle's own
-   code signature re-verified.
+3. The archive is expanded, the bundle's code signature verified, its
+   signing chain required to be Apple's Developer ID one, and the stapled
+   notarization ticket required to be present, before it is installed.
+   (`spctl` assesses app bundles alone; Gatekeeper evaluates the plug-in
+   itself when System Settings loads it.)
 
 Without cosign the script stops; `--allow-unverified` opts into a checksum-only
 install explicitly. The install one-liner fetches the installer attached to the
@@ -128,8 +134,22 @@ shasum -a 256 -c checksums.txt   # the archive and install.sh
 ## Releases
 
 `just do release vX.Y.Z` verifies a clean tree, creates a signed tag and pushes
-it. The tag push triggers the release workflow: build on a macOS runner with
-the tag as the bundle's version, `verify-bundle`, keyless cosign signature on
-`checksums.txt`, GitHub release, whose notes GitHub writes from the pull
-requests merged since the previous tag. Pushing `v*` tags is restricted by a
-repository ruleset.
+it. The tag push triggers the release workflow: the Developer ID certificate
+is imported into a keychain made for the job, the bundle is built on a macOS
+runner with the tag as its version and signed with that identity,
+`verify-bundle` asserts the signature is the identity's and timestamped,
+`notarize` submits the bundle with `notarytool` and staples the ticket, then
+the keyless cosign signature on `checksums.txt`, the GitHub release, whose
+notes GitHub writes from the pull requests merged since the previous tag, and
+the build provenance attestation over every asset. Pushing `v*` tags is
+restricted by a repository ruleset.
+
+The workflow reads five repository secrets, created by the owner and never
+seen by a session: `APPLE_DEVELOPER_ID_P12` and
+`APPLE_DEVELOPER_ID_P12_PASSWORD` (the certificate, base64, and its password,
+the same two taciturn's release uses), and for notarization
+`APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and `APPLE_NOTARY_KEY` (an App
+Store Connect API key: its id, the issuer id, and the `.p8` base64). A tag
+pushed without them fails before anything builds. A local
+`just do release --local --dry-run` has no identity: it builds ad hoc, skips
+notarization and says so.
