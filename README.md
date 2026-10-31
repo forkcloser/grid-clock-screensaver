@@ -13,14 +13,21 @@ macOS 14 or later, Apple silicon.
 
 ## Install
 
+Download the `grid-clock_<version>_arm64.zip` asset of the
+[latest release](https://github.com/forkcloser/grid-clock-screensaver/releases/latest),
+unzip it and double-click `Grid Clock.saver`. The release is signed and
+notarized; macOS installs it into `~/Library/Screen Savers`.
+
+Or from a terminal:
+
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
 ```
 
 The installer verifies the release with [cosign](https://github.com/sigstore/cosign)
-(`brew install cosign`) and installs into `~/Library/Screen Savers`.
+(`brew install cosign`) and installs into `~/Library/Screen Savers`;
 `--system` installs for all users, `--version X.Y.Z` pins a release, `--help`
-lists the rest. To check the assets by hand instead, see
+lists the rest. Verifying the assets yourself:
 [DEVELOPMENT.md](./DEVELOPMENT.md#installer-verification).
 
 From source, with Xcode installed:
