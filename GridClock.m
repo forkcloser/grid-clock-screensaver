@@ -104,6 +104,12 @@ typedef NS_ENUM(NSInteger, GCDisplayMode) {
     GCDisplayModeAllDisplays = 1,
 };
 
+// The preference value is also the popup's item index: anything but the two
+// values is read as the default.
+static GCDisplayMode GCDisplayModeFromValue(NSInteger value) {
+    return value == GCDisplayModeAllDisplays ? GCDisplayModeAllDisplays : GCDisplayModeMainOnly;
+}
+
 #pragma mark - Time -> lit cells
 
 static void GCLight(BOOL *lit, GCWord word) {
@@ -373,7 +379,7 @@ static BOOL GCVisibleOnScreen(BOOL isPreview, GCDisplayMode mode, BOOL hasScreen
 - (void)updateVisibility {
     NSScreen *screen = self.window.screen;
     BOOL visible = GCVisibleOnScreen(self.isPreview,
-                                     (GCDisplayMode)[GridClock.defaults integerForKey:kDisplayModeKey],
+                                     GCDisplayModeFromValue([GridClock.defaults integerForKey:kDisplayModeKey]),
                                      screen != nil,
                                      screen ? screen.frame.origin : CGPointZero);
     if (visible != _visibleOnThisScreen) {
@@ -452,7 +458,7 @@ static BOOL GCVisibleOnScreen(BOOL isPreview, GCDisplayMode mode, BOOL hasScreen
 
 - (NSWindow *)configureSheet {
     if (!_configSheet) [self buildConfigureSheet];
-    [_displayModePopUp selectItemAtIndex:[GridClock.defaults integerForKey:kDisplayModeKey]];
+    [_displayModePopUp selectItemAtIndex:GCDisplayModeFromValue([GridClock.defaults integerForKey:kDisplayModeKey])];
     _brightnessBeforeEditing = GCClampedBrightness([GridClock.defaults integerForKey:kBrightnessKey]);
     _brightnessSlider.integerValue = _brightnessBeforeEditing;
     return _configSheet;
