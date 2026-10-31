@@ -138,6 +138,53 @@ notarize version=DEV_VERSION configuration='Release':
     xcrun stapler validate "$saver"
     echo "notarize: {{ SAVER }} {{ version }} notarized (submission ${id:-?}), ticket stapled"
 
+# The release assets, as goreleaser publishes them: the notarized bundle in a
+# zip and the installer beside it, under build/assets/. ditto, not zip: it is
+# the archiver that keeps a bundle's extended attributes and code signature
+# intact. The release workflow's sign job runs this; the publish job and a
+# local dry run hand the result to goreleaser, which runs verify-assets.
+[doc('Build, verify, notarize and zip the .saver with the installer into build/assets/')]
+package version=DEV_VERSION configuration='Release': (verify-bundle version configuration) (notarize version configuration)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p build/assets
+    rm -f build/assets/*.zip
+    ditto -c -k --sequesterRsrc --keepParent 'build/Build/Products/{{ configuration }}/{{ SAVER }}' 'build/assets/grid-clock_{{ version }}_arm64.zip'
+    cp install.sh build/assets/install.sh
+    echo "packaged build/assets/grid-clock_{{ version }}_arm64.zip and build/assets/install.sh"
+
+# What goreleaser is handed must be the release's bundle: the zip for this
+# version, carrying a bundle of this version whose signature verifies. In
+# GitHub Actions that signature must be a timestamped Developer ID one with
+# the notarization ticket stapled; a local dry run's bundle is ad hoc and is
+# accepted as such.
+[doc("Assert build/assets/ holds this version's installer and a bundle whose signature verifies")]
+verify-assets version=DEV_VERSION:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fail() { echo "verify-assets: $*" >&2; exit 1; }
+    archive='build/assets/grid-clock_{{ version }}_arm64.zip'
+    [ -f "$archive" ] || fail "$archive is missing"
+    [ -f build/assets/install.sh ] || fail "build/assets/install.sh is missing"
+    cmp -s install.sh build/assets/install.sh || fail "build/assets/install.sh differs from install.sh"
+    rm -rf build/assets-verify
+    ditto -x -k "$archive" build/assets-verify
+    saver='build/assets-verify/{{ SAVER }}'
+    [ -d "$saver" ] || fail "$archive does not contain {{ SAVER }}"
+    actual=$(plutil -extract CFBundleShortVersionString raw -o - "$saver/Contents/Info.plist")
+    [ "$actual" = '{{ version }}' ] || fail "the bundle is version '$actual', expected '{{ version }}'"
+    codesign --verify --deep --strict "$saver" || fail "the code signature does not verify"
+    details=$(codesign -d --verbose=2 "$saver" 2>&1)
+    if printf '%s\n' "$details" | grep -q '^Authority=Developer ID Application'; then
+        printf '%s\n' "$details" | grep -q '^Timestamp=' || fail "the Developer ID signature carries no timestamp"
+        [ -f "$saver/Contents/CodeResources" ] || fail "no notarization ticket is stapled"
+        xcrun stapler validate "$saver" || fail "the stapled ticket does not validate"
+        echo "verify-assets: $archive holds {{ SAVER }} {{ version }}, Developer ID signed, timestamped, ticket stapled"
+    else
+        [ -z "${GITHUB_ACTIONS:-}" ] || fail "the bundle is not Developer ID signed; a release built in GitHub Actions must be"
+        echo "verify-assets: $archive holds {{ SAVER }} {{ version }}, ad hoc signed (a local dry run)"
+    fi
+
 # GridClock.m is compiled into the harness directly: the shipped source is what
 # is tested, not a copy of its logic. test/regenerate-golden.js produces the
 # golden file.

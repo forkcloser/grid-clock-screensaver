@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # goreleaser — https://goreleaser.com — release automation for Grid Clock.
-# Local dry-run: `just do release --local --dry-run` (no tag, no publish, artifacts
-# under build/release/). Real release: `just do release vX.Y.Z` (see .limen/just/release.just).
+# Local dry-run: `just package && just do release --local --dry-run` (no tag, no
+# publish, artifacts under build/release/). Real release: `just do release
+# vX.Y.Z` (see .limen/just/release.just).
 version: 2
 
 project_name: grid-clock
@@ -13,36 +14,29 @@ project_name: grid-clock
 dist: build/release
 
 # goreleaser cannot drive Xcode (the `prebuilt` builder is Pro-only): the
-# bundle comes from before-hooks, rides in via extra_files, and the build pipe
-# is skipped.
+# assets are made by `just package` before goreleaser runs, in the release
+# workflow's sign job, the only one that holds the signing identity, or
+# locally for a dry run. They ride in via extra_files and the build pipe is
+# skipped. The installer ships next to the bundle so it is version-matched
+# and covered by the same checksums file it verifies against; the readme's
+# one-liner runs THAT copy (releases/latest/download/install.sh), never main's.
 before:
   hooks:
-    # The tag becomes the bundle's version; the project file pins 0.0.0, so a
-    # bundle built any other way is recognisably unversioned.
-    - just build Release {{ .Version }}
-    # Asserts version, bundle identifier, arm64 only, minimum macOS and the
-    # hardened signature, Developer ID when the release workflow provides the
-    # identity.
-    - just verify-bundle {{ .Version }}
-    # Notarizes the signed bundle and staples the ticket, so a download
-    # installs by double-click; skipped, and said so, where no identity is
-    # set (a local dry run).
-    - just notarize {{ .Version }}
-    # ditto, not zip: it is the only archiver that preserves a macOS bundle's
-    # symlinks, extended attributes, and code signature intact. A `zip -r` copy
-    # can arrive with a broken signature, which Gatekeeper then rejects for a
-    # reason that has nothing to do with how it was signed.
-    - bash -c 'mkdir -p build/assets && rm -f build/assets/*.zip && ditto -c -k --sequesterRsrc --keepParent "build/Build/Products/Release/Grid Clock.saver" "build/assets/grid-clock_{{ .Version }}_arm64.zip"'
-    # Ship the installer next to the bundle so it is version-matched and covered
-    # by the same checksums file it verifies against. The readme's one-liner
-    # runs THIS copy (releases/latest/download/install.sh), never main's.
-    - bash -c 'cp install.sh build/assets/install.sh'
+    # What arrived is this version's assets: the recipe in .justfile says what
+    # it asserts.
+    - just verify-assets {{ .Version }}
 
 builds:
   - id: no-go-build
     skip: true
 
-# No archives: the artifact is already a zip, produced by ditto above. Wrapping
+# A dry run is a snapshot, and its version must be the one `just package`
+# zipped under: DEV_VERSION in .justfile. goreleaser's default template would
+# name a version nothing was packaged as, and verify-assets would find no zip.
+snapshot:
+  version_template: '0.0.0'
+
+# No archives: the artifact is already a zip, produced by `just package`. Wrapping
 # it in a goreleaser archive would ship a zip inside a zip.
 archives: []
 

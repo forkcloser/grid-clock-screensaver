@@ -132,23 +132,34 @@ shasum -a 256 -c checksums.txt   # the archive and install.sh
 ## Releases
 
 `just do release vX.Y.Z` verifies a clean tree, creates a signed tag and pushes
-it. The tag push triggers the release workflow: the Developer ID certificate
-is imported into a keychain made for the job and its team id read off the
-identity's name, the bundle is built on a macOS runner with the tag as its
-version and signed with that identity under that team,
-`verify-bundle` asserts the signature is the identity's and timestamped,
-`notarize` submits the bundle with `notarytool` and staples the ticket, then
-the keyless cosign signature on `checksums.txt`, the GitHub release, whose
-notes GitHub writes from the pull requests merged since the previous tag, and
-the build provenance attestation over every asset. Pushing `v*` tags is
+it. The tag push runs the release workflow's two jobs. Pushing `v*` tags is
 restricted by a repository ruleset.
 
-The workflow's job runs in the `release` environment, which holds the five
-secrets: `APPLE_DEVELOPER_ID_P12` and `APPLE_DEVELOPER_ID_P12_PASSWORD` (the
-certificate, base64, and its password), and for notarization
-`APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and `APPLE_NOTARY_KEY` (an App
-Store Connect API key: its id, the issuer id, and the `.p8` base64). Only a
-`v*` tag may deploy to the environment and each run waits for the owner's
-approval, so a workflow on a branch cannot read them. A local
-`just do release --local --dry-run` has no identity: it builds ad hoc, skips
-notarization and says so.
+The `sign` job is the only one with the certificate. It runs in the `release`
+environment, which holds the five secrets: `APPLE_DEVELOPER_ID_P12` and
+`APPLE_DEVELOPER_ID_P12_PASSWORD` (the certificate, base64, and its password),
+and for notarization `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and
+`APPLE_NOTARY_KEY` (an App Store Connect API key: its id, the issuer id, and
+the `.p8` base64). Only a `v*` tag may deploy to the environment and each run
+waits for the owner's approval, so a workflow on a branch cannot read them.
+The certificate is imported into a keychain made for the job and its team id
+read off the identity's name; `just package` builds the bundle with the tag
+as its version, signed with that identity under that team, asserts the
+signature is the identity's and timestamped (`verify-bundle`), submits it
+with `notarytool` and staples the ticket (`notarize`), and zips it with the
+installer into `build/assets/`. The keychain and the key are then deleted and
+the assets uploaded as a run artifact, so while the identity is in its
+keychain only the pinned toolchain and Apple's tools run; the job's token is
+read-only.
+
+The `publish` job has no Apple secret. It downloads the assets, and
+`just do release --ci` runs goreleaser: `verify-assets` checks that what
+arrived is this version's installer and a bundle of this version with a
+timestamped Developer ID signature and a stapled ticket, then the keyless
+cosign signature on `checksums.txt`, the GitHub release, whose notes GitHub
+writes from the pull requests merged since the previous tag, and the build
+provenance attestation over every asset.
+
+A local `just package && just do release --local --dry-run` has no identity:
+it builds ad hoc, skips notarization and says so, and `verify-assets` accepts
+the ad hoc signature outside GitHub Actions.
