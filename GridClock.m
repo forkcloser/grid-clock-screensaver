@@ -79,15 +79,9 @@ static const NSTimeInterval kWakeSlack     = 0.05;        // arm a hair past the
 static const CGFloat kGridScale       = 0.92;  // fraction of the short edge
 static const CGFloat kFontSizeRatio   = 0.45;  // point size as a fraction of a cell
 
-static NSString * const kModuleName          = @"org.forkcloser.grid-clock";
-// 1.0.0 kept its preferences under world.farcloser.grid-clock, 0.0.5 and
-// 0.1.0 under upstream's identifier. Each is read once, on the first launch
-// that finds nothing under ours, never again.
-static NSString * const kPreviousModuleName  = @"world.farcloser.grid-clock";
-static NSString * const kLegacyModuleName    = @"com.chrstphrknwtn.grid-clock";
-static NSString * const kDisplayModeKey      = @"displayMode";
-static NSString * const kLegacyDisplayKey    = @"screenDisplayOption";
-static NSString * const kBrightnessKey       = @"brightness";   // percent
+static NSString * const kModuleName     = @"org.forkcloser.grid-clock";
+static NSString * const kDisplayModeKey = @"displayMode";
+static NSString * const kBrightnessKey  = @"brightness";   // percent
 
 // Brightness scales every glyph — lit and unlit alike — toward the black
 // background, so the grid dims as a whole. 5 % keeps it faintly readable;
@@ -227,41 +221,6 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         defaults = [ScreenSaverDefaults defaultsForModuleWithName:kModuleName];
-        if ([defaults objectForKey:kDisplayModeKey] == nil &&
-            [defaults objectForKey:kBrightnessKey] == nil) {
-            // Nothing under our identifier yet: carry the settings over from
-            // 1.0.0's domain, both keys as they are, else the display setting
-            // from upstream's. 0.1.0 wrote displayMode there as-is; 0.0.5
-            // wrote screenDisplayOption as 0 = primary, 1 = last focused,
-            // 2 = all — "last focused" is meaningless now that macOS hosts
-            // each display in its own process, so it collapses into "main".
-            ScreenSaverDefaults *previous =
-                [ScreenSaverDefaults defaultsForModuleWithName:kPreviousModuleName];
-            id mode = [previous objectForKey:kDisplayModeKey];
-            id brightness = [previous objectForKey:kBrightnessKey];
-            if (mode == nil) {
-                ScreenSaverDefaults *legacy =
-                    [ScreenSaverDefaults defaultsForModuleWithName:kLegacyModuleName];
-                mode = [legacy objectForKey:kDisplayModeKey];
-                if (mode == nil) {
-                    id option = [legacy objectForKey:kLegacyDisplayKey];
-                    if (option != nil) {
-                        mode = @([option integerValue] >= 2 ? GCDisplayModeAllDisplays
-                                                            : GCDisplayModeMainOnly);
-                    }
-                }
-            }
-            if (mode != nil) {
-                [defaults setInteger:[mode integerValue] forKey:kDisplayModeKey];
-            }
-            if (brightness != nil) {
-                [defaults setInteger:GCClampedBrightness([brightness integerValue])
-                              forKey:kBrightnessKey];
-            }
-            if (mode != nil || brightness != nil) {
-                [defaults synchronize];
-            }
-        }
         [defaults registerDefaults:@{ kDisplayModeKey: @(GCDisplayModeMainOnly),
                                       kBrightnessKey:  @(kMaxBrightness) }];
     });

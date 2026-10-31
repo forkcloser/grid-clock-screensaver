@@ -7,9 +7,7 @@ import '.limen/just/main.just'
 XCODE_PROJECT := 'Grid Clock.xcodeproj'
 XCODE_SCHEME := 'Grid Clock'
 SAVER := 'Grid Clock.saver'
-# Ours since 1.1 (1.0 shipped as world.farcloser.grid-clock, 0.1.0 under
-# upstream's com.chrstphrknwtn.grid-clock). It is also the preferences domain;
-# GridClock.m reads the old ones once on first launch. verify-bundle holds the
+# The bundle identifier, and the preferences domain. verify-bundle holds the
 # build to it.
 BUNDLE_ID := 'org.forkcloser.grid-clock'
 # What a bundle built outside a release says it is. The project file pins the

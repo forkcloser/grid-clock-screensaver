@@ -26,9 +26,8 @@ Settings thumbnail to a 6K display.
 ## Differences from upstream
 
 What the fork changes for a user, the native rendering, the brightness option,
-the display options and the bundle identifier with its preference migrations,
-is the table in [`UPSTREAM.md`](./UPSTREAM.md). What changed in the project
-itself:
+the display options and the bundle identifier, is the table in
+[`UPSTREAM.md`](./UPSTREAM.md). What changed in the project itself:
 
 - **Removed:** `Webview/` and `ConfigureSheet.xib` (the sheet is built in
   code; the xib used `+[NSBundle loadNibNamed:owner:]`, deprecated since

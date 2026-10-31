@@ -24,8 +24,8 @@ adapted to the fork; nothing is merged from upstream.
 | Change | Here |
 | --- | --- |
 | The clock is drawn natively with Core Text; the bundle loads no HTML, JavaScript or web engine at runtime (upstream's `WebView` stopped drawing on macOS 14) | [`ae86059`](https://github.com/forkcloser/grid-clock-screensaver/commit/ae86059) |
-| Font sizing off the cell, replacing upstream's viewport units; the "last focused screen" display option is gone, since macOS 14 runs one saver per display: an existing "last focused" preference becomes "main display only" and "all screens" migrates as it is | [`ae86059`](https://github.com/forkcloser/grid-clock-screensaver/commit/ae86059) |
+| Font sizing off the cell, replacing upstream's viewport units; the "last focused screen" display option is gone, since macOS 14 runs one saver per display | [`ae86059`](https://github.com/forkcloser/grid-clock-screensaver/commit/ae86059) |
 | Brightness option, 5 to 100 %, a multiplier on the two grey levels | [`1b01324`](https://github.com/forkcloser/grid-clock-screensaver/commit/1b01324) |
 | The bundle carries its own version and build number, checked on the built product; the installer verifies the release's signed checksums before it fetches | https://github.com/forkcloser/grid-clock-screensaver/pull/9 |
 | The timer sleeps between minute transitions and runs at 30 Hz only during the crossfade; a system time-zone change is read at the next minute | https://github.com/forkcloser/grid-clock-screensaver/pull/9 |
-| The bundle identifier is the fork's, `org.forkcloser.grid-clock`, with the display and brightness settings carried over from the earlier domains on first launch (breaking: macOS sees a new saver) | https://github.com/forkcloser/grid-clock-screensaver/pull/9, https://github.com/forkcloser/grid-clock-screensaver/pull/73 |
+| The bundle identifier is the fork's, `org.forkcloser.grid-clock` (breaking: macOS sees a new saver, and the display and brightness settings are chosen again) | https://github.com/forkcloser/grid-clock-screensaver/pull/9, https://github.com/forkcloser/grid-clock-screensaver/pull/73 |
