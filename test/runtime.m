@@ -61,11 +61,18 @@ int main(void) {
     @autoreleasepool {
         NSApplicationLoad();
 
-        // 0. Brightness clamps to its range; the range never reaches black.
+        // 0. Preferences: brightness clamps to its range, which never reaches
+        //    black; the display mode is one of two values.
         CHECK(GCClampedBrightness(0) == kMinBrightness && GCClampedBrightness(-7) == kMinBrightness,
               "brightness below the floor clamps to %ld%%", (long)kMinBrightness);
         CHECK(GCClampedBrightness(250) == kMaxBrightness, "brightness above 100 clamps to 100%%");
         CHECK(GCClampedBrightness(42) == 42, "brightness in range is kept");
+        CHECK(GCDisplayModeFromValue(0) == GCDisplayModeMainOnly &&
+              GCDisplayModeFromValue(1) == GCDisplayModeAllDisplays,
+              "the two display mode values are kept");
+        CHECK(GCDisplayModeFromValue(-1) == GCDisplayModeMainOnly &&
+              GCDisplayModeFromValue(2) == GCDisplayModeMainOnly,
+              "a display mode outside the two values reads as main only");
 
         // 1. Time zone: three zones with distinct offsets, changed after the
         // process has already read the clock once.
