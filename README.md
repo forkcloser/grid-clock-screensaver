@@ -90,7 +90,8 @@ What the fork adds and changes for a user is the table in
 
 ## Reporting
 
-The issue tracker is off. Security reports go through
+Bugs go to the [issue tracker](https://github.com/forkcloser/grid-clock-screensaver/issues).
+Security reports go through
 [private vulnerability reporting](https://github.com/forkcloser/grid-clock-screensaver/security/advisories/new).
 
 ## Licensing
