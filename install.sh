@@ -148,18 +148,11 @@ proceed on checksum alone — which proves the download is intact, but not
 who produced it."
 fi
 
-# The archive is whichever one the (now trusted) manifest lists for this
-# version. arm64-only preferred; a universal archive (what v0.1.0 shipped)
-# carries an arm64 slice and is accepted. Exact match on the second column —
-# never a pattern, never a guess.
-archive=""
-for candidate in "grid-clock_${bare}_arm64.zip" "grid-clock_${bare}_universal.zip"; do
-    if awk -v a="$candidate" '$2 == a { found = 1 } END { exit !found }' "$workdir/checksums.txt"; then
-        archive="$candidate"
-        break
-    fi
-done
-[ -n "$archive" ] || die "release $version lists no grid-clock_${bare}_arm64.zip or grid-clock_${bare}_universal.zip in checksums.txt:
+# The archive must be listed by the (now trusted) manifest: exact match on the
+# second column, never a pattern.
+archive="grid-clock_${bare}_arm64.zip"
+awk -v a="$archive" '$2 == a { found = 1 } END { exit !found }' "$workdir/checksums.txt" \
+    || die "release $version lists no $archive in checksums.txt:
 $(cat "$workdir/checksums.txt")"
 
 echo "downloading ${archive}..."
