@@ -57,9 +57,8 @@ build configuration='Release' version=DEV_VERSION:
         build
     echo "built build/Build/Products/{{ configuration }}/{{ SAVER }} ({{ version }}, build $build_number, signed by $identity)"
 
-# What the shipped bundle must be, asserted rather than inspected — v0.1.0 went
-# out as a universal binary claiming to be 1.0.0 (1), and nothing noticed. Runs
-# on every `just test` against the dev build and, from the goreleaser hooks,
+# What the shipped bundle must be, asserted rather than inspected. Runs on
+# every `just test` against the dev build and, from the goreleaser hooks,
 # against the tagged one.
 [doc('Assert the built .saver is what we ship: version, bundle id, arch, min OS, signature')]
 verify-bundle version=DEV_VERSION configuration='Release': (build configuration version)

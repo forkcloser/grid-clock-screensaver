@@ -88,8 +88,9 @@ one (`just build Release 1.2.3`).
   (`NSBundle` → `principalClass`), renders a frame offscreen, and checks it
   looks like a lit grid on black.
 - `just verify-bundle` asserts what the built bundle is: version, bundle
-  identifier, arm64 only, macOS 15.0 minimum, an intact ad-hoc signature with
-  the hardened runtime. The release runs it before packaging.
+  identifier, arm64 only, macOS 15.0 minimum, an intact hardened-runtime
+  signature: ad hoc locally, Developer ID and timestamped in the release,
+  which runs it before packaging.
 
 ## Installer verification
 
@@ -143,12 +144,10 @@ notes GitHub writes from the pull requests merged since the previous tag, and
 the build provenance attestation over every asset. Pushing `v*` tags is
 restricted by a repository ruleset.
 
-The workflow reads five repository secrets, created by the owner and never
-seen by a session: `APPLE_DEVELOPER_ID_P12` and
-`APPLE_DEVELOPER_ID_P12_PASSWORD` (the certificate, base64, and its password,
-the same two taciturn's release uses), and for notarization
-`APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and `APPLE_NOTARY_KEY` (an App
-Store Connect API key: its id, the issuer id, and the `.p8` base64). A tag
-pushed without them fails before anything builds. A local
-`just do release --local --dry-run` has no identity: it builds ad hoc, skips
-notarization and says so.
+The workflow reads five repository secrets: `APPLE_DEVELOPER_ID_P12` and
+`APPLE_DEVELOPER_ID_P12_PASSWORD` (the certificate, base64, and its password),
+and for notarization `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and
+`APPLE_NOTARY_KEY` (an App Store Connect API key: its id, the issuer id, and
+the `.p8` base64). A tag pushed without them fails before anything builds. A
+local `just do release --local --dry-run` has no identity: it builds ad hoc,
+skips notarization and says so.
