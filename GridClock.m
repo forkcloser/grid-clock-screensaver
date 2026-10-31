@@ -114,13 +114,13 @@ static void GCLight(BOOL *lit, GCWord word) {
 
 // hour is 1...12
 static void GCLightPrefixHour(BOOL *lit, NSInteger hour) {
-    GCLight(lit, (GCWord)(GCWordPrefixOne + (hour - 1)));
+    GCLight(lit, (GCWord)(GCWordPrefixOne + (NSUInteger)(hour - 1)));
 }
 
 // hour is 1...13, where 13 wraps back around to one
 static void GCLightSuffixHour(BOOL *lit, NSInteger hour) {
     if (hour == 13) hour = 1;
-    GCLight(lit, (GCWord)(GCWordSuffixOne + (hour - 1)));
+    GCLight(lit, (GCWord)(GCWordSuffixOne + (NSUInteger)(hour - 1)));
 }
 
 static void GCComputeLitCells(NSInteger hour24, NSInteger minute, BOOL *lit) {
@@ -176,7 +176,7 @@ static void GCComputeLitCells(NSInteger hour24, NSInteger minute, BOOL *lit) {
     }
     NSInteger units = minute % 10;
     if (units != 0) {
-        GCLight(lit, (GCWord)(GCWordSuffixOne + (units - 1)));
+        GCLight(lit, (GCWord)(GCWordSuffixOne + (NSUInteger)(units - 1)));
     }
 }
 
@@ -267,7 +267,7 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     if (!self) return nil;
 
     _visibleOnThisScreen = YES;
-    _brightness = GCClampedBrightness([GridClock.defaults integerForKey:kBrightnessKey]) / (CGFloat)kMaxBrightness;
+    _brightness = (CGFloat)GCClampedBrightness([GridClock.defaults integerForKey:kBrightnessKey]) / (CGFloat)kMaxBrightness;
     [self refreshLitCells];
     memcpy(_wasLit, _lit, sizeof(_lit));  // start settled, don't fade in
     _animating = NO;
@@ -342,8 +342,9 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     GCComputeLitCells(hour, minute, _lit);
 }
 
-// Linear progress through the crossfade, eased. smoothstep is a close enough
-// stand-in for the CSS `ease-in-out` the web version used.
+// Linear progress through the crossfade, 0 to 1. The caller eases it with
+// smoothstep, a close enough stand-in for the CSS `ease-in-out` the web
+// version used.
 - (CGFloat)transitionProgress {
     if (kTransition <= 0) return 1.0;
     CGFloat t = (NSDate.timeIntervalSinceReferenceDate - _transitionStart) / kTransition;
@@ -429,7 +430,7 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
             if (state != pass) continue;
             glyphs[n] = _glyphs[i];
             positions[n] = CGPointMake(originX + (i % kCols) * cell + (cell - _advances[i]) / 2.0,
-                                       originY + (kRows - 1 - i / kCols) * cell + baselineInset);
+                                       originY + (CGFloat)(kRows - 1 - i / kCols) * cell + baselineInset);
             n++;
         }
         if (n == 0) continue;
@@ -499,7 +500,7 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
 }
 
 - (void)applyBrightness:(NSInteger)percent {
-    _brightness = GCClampedBrightness(percent) / (CGFloat)kMaxBrightness;
+    _brightness = (CGFloat)GCClampedBrightness(percent) / (CGFloat)kMaxBrightness;
     [self setNeedsDisplay:YES];
 }
 
