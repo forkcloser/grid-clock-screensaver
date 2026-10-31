@@ -1,5 +1,7 @@
-# Diverges from limen's canonical release.yaml in `runs-on` only. Keep
-# everything else in sync.
+# Diverges from limen's canonical release.yaml in `runs-on`, in the project
+# steps marked below (the Developer ID identity, the notarization
+# credentials, their removal), and in the attest step's subject paths, this
+# project's. Keep everything else in sync.
 #
 # The workflow half of the release lane:
 # `just do release vX.Y.Z` verifies the tree, creates the SIGNED tag and
@@ -37,8 +39,11 @@ jobs:
       # Publish the GitHub release and its assets.
       contents: write
       # Keyless signing: cosign exchanges the workflow's OIDC token for a
-      # short-lived Fulcio certificate bound to this workflow@tag identity.
+      # short-lived Fulcio certificate bound to this workflow@tag identity;
+      # the attestation below is signed the same way.
       id-token: write
+      # Store the build provenance attestations.
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,9 +57,80 @@ jobs:
       - name: Install hermetic (pinned, verified)
         uses: ./.github/actions/setup-hermetic
 
+      # Project step: the Developer ID Application identity the bundle is
+      # signed with, per the signing and provenance policy (limen's
+      # book/releasing.md): a bundle a human installs through System Settings
+      # is evaluated by Gatekeeper, so it is signed, notarized and stapled.
+      # The certificate goes into a keychain made for this job and deleted at
+      # its end, never into the login keychain and never onto disk
+      # unencrypted. A tag pushed without the secrets fails here, before
+      # anything builds.
+      - name: Signing identity
+        env:
+          P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          [ -n "$P12_BASE64" ] && [ -n "$P12_PASSWORD" ] || {
+            echo "the signing secrets are not set" >&2; exit 1; }
+          keychain="$RUNNER_TEMP/grid-clock-signing.keychain-db"
+          # Named to the cleanup step first, so it finds the keychain even
+          # when a step below fails.
+          echo "GRID_CLOCK_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          password="$(openssl rand -hex 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 1800 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$P12_BASE64" | base64 -d > "$RUNNER_TEMP/identity.p12"
+          security import "$RUNNER_TEMP/identity.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/identity.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application" || {
+            echo "no Developer ID Application identity in the imported certificate" >&2; exit 1; }
+          echo "GRID_CLOCK_SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
+
+      # Project step: the App Store Connect API key notarytool submits with,
+      # written where the notarize recipe reads it and removed at the end.
+      - name: Notarization credentials
+        env:
+          KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY }}
+        run: |
+          [ -n "$KEY_ID" ] && [ -n "$ISSUER_ID" ] && [ -n "$KEY_BASE64" ] || {
+            echo "the notarization secrets are not set" >&2; exit 1; }
+          key="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          printf '%s' "$KEY_BASE64" | base64 -d > "$key"
+          chmod 0600 "$key"
+          {
+            echo "GRID_CLOCK_NOTARY_KEY=$key"
+            echo "GRID_CLOCK_NOTARY_KEY_ID=$KEY_ID"
+            echo "GRID_CLOCK_NOTARY_ISSUER_ID=$ISSUER_ID"
+          } >> "$GITHUB_ENV"
+
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # shellcheck disable=SC1010 # `do` is just's shared-task namespace, not the shell keyword.
           just do release --ci
+
+      # Project step: the job's keychain and the API key go, success or not.
+      - name: Remove the signing identity and the notarization key
+        if: always()
+        run: |
+          [ -z "${GRID_CLOCK_SIGNING_KEYCHAIN:-}" ] || security delete-keychain "$GRID_CLOCK_SIGNING_KEYCHAIN" || true
+          rm -f "${GRID_CLOCK_NOTARY_KEY:-/nonexistent}"
+
+      # Build provenance for what goreleaser published: the bundle's archive,
+      # the installer and checksums.txt, so nothing fetched goes unattested;
+      # verifiable with `gh attestation verify <asset> --repo forkcloser/grid-clock-screensaver`.
+      # The paths are this project's: goreleaser's dist is build/release and
+      # the assets ride in from build/assets (.release-go.yaml).
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: |
+            build/assets/*.zip
+            build/assets/install.sh
+            build/release/checksums.txt

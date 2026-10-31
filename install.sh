@@ -5,10 +5,13 @@
 #
 # That URL is this script as attached to the latest release, listed in its
 # checksums.txt: the one signed file it cannot verify for you before it runs
-# (the readme shows the by-hand check). cosign verification comes before
-# de-quarantine, the archive name comes from the verified checksums.txt rather
-# than a guess, and the script stops rather than downgrade to checksum-only;
-# --allow-unverified opts in. Why: DEVELOPMENT.md, "Installer verification".
+# (the readme shows the by-hand check). cosign verification comes first, the
+# archive name comes from the verified checksums.txt rather than a guess, the
+# bundle is Developer ID signed and notarized, so its signing chain and the
+# stapled ticket are checked rather than bypassed, and the script stops rather
+# than downgrade
+# to checksum-only; --allow-unverified opts in. Why: DEVELOPMENT.md,
+# "Installer verification".
 
 set -euo pipefail
 
@@ -80,7 +83,7 @@ if [ "$major" -lt 14 ]; then
     die "macOS 14 or later required (found $(sw_vers -productVersion)) — on 13 and earlier, run the original: https://github.com/chrstphrknwtn/grid-clock-screensaver"
 fi
 
-for tool in curl ditto shasum xattr codesign; do
+for tool in curl ditto shasum codesign; do
     command -v "$tool" > /dev/null 2>&1 || die "required tool not found: $tool"
 done
 
@@ -176,13 +179,26 @@ echo "expanding..."
 ditto -x -k "$workdir/$archive" "$workdir/extracted"
 [ -d "$workdir/extracted/$SAVER" ] || die "the archive did not contain $SAVER"
 
-xattr -dr com.apple.quarantine "$workdir/extracted/$SAVER" 2> /dev/null || true
-
 # A transfer that damaged the bundle would show up here rather than as a
 # baffling failure later, when macOS refuses to load it.
 codesign --verify --deep --strict "$workdir/extracted/$SAVER" \
     || die "the bundle's code signature is not intact after extraction — not installing"
 echo "code signature intact"
+
+# The bundle keeps the quarantine attribute its download gave it: it is
+# Developer ID signed and notarized, with the ticket stapled, so Gatekeeper
+# accepts it when System Settings loads it. What is checked here is what a
+# plug-in lets a script check (spctl assesses app bundles alone): the
+# signature's chain is Apple's Developer ID one, the requirement every
+# Developer ID Application signature satisfies, and the stapled ticket is
+# present, the file stapler writes into a bundle.
+codesign --verify --deep --strict \
+    -R='anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13]' \
+    "$workdir/extracted/$SAVER" \
+    || die "the bundle is not signed with a Developer ID — not installing"
+[ -f "$workdir/extracted/$SAVER/Contents/CodeResources" ] \
+    || die "the bundle carries no notarization ticket — not installing"
+echo "Developer ID signature verified, notarization ticket present"
 
 if [ -e "$prefix/$SAVER" ]; then
     echo "replacing the existing $prefix/$SAVER"

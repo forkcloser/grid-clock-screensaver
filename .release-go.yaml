@@ -22,9 +22,14 @@ before:
     # recognisably unversioned.
     - just build Release {{ .Version }}
     # Asserts version, bundle identifier, arm64 only, minimum macOS and the
-    # hardened ad-hoc signature. v0.1.0 shipped universal, claiming 1.0.0 (1);
-    # this is the gate that would have caught it.
+    # hardened signature, Developer ID when the release workflow provides the
+    # identity. v0.1.0 shipped universal, claiming 1.0.0 (1); this is the
+    # gate that would have caught it.
     - just verify-bundle {{ .Version }}
+    # Notarizes the signed bundle and staples the ticket, so a download
+    # installs by double-click; skipped, and said so, where no identity is
+    # set (a local dry run).
+    - just notarize {{ .Version }}
     # ditto, not zip: it is the only archiver that preserves a macOS bundle's
     # symlinks, extended attributes, and code signature intact. A `zip -r` copy
     # can arrive with a broken signature, which Gatekeeper then rejects for a
@@ -52,20 +57,16 @@ checksum:
     - glob: build/assets/install.sh
 
 # cosign (v3, Sigstore bundle format) over the checksums file — signing that one
-# file transitively covers every artifact it lists. Two lanes, switched by
-# whether COSIGN_KEY is set (the `just do release` recipe controls that); see
-# .limen/just/release.just for both.
-#
-# goreleaser only substitutes ${signature}/${artifact} in args; ${COSIGN_KEY:-}
-# survives for the shell to branch on. One line, not a block scalar: yamlfmt
-# corrupts folded scalars (its internal line marker leaks into the content).
+# file transitively covers every artifact it lists. Keyless: cosign exchanges
+# the release workflow's OIDC token for a short-lived certificate bound to
+# this workflow@tag identity, and the signature is logged in Rekor (limen's
+# book/releasing.md, "The signing and provenance policy"); a local dry run
+# skips signing.
 signs:
-  - cmd: sh
+  - cmd: cosign
     artifacts: checksum
     signature: "${artifact}.sigstore.json"
-    args:
-      - -c
-      - 'if [ -n "${COSIGN_KEY:-}" ]; then cosign sign-blob --yes --key "${COSIGN_KEY}" --use-signing-config=false --bundle "${signature}" "${artifact}"; else cosign sign-blob --yes --bundle "${signature}" "${artifact}"; fi'
+    args: [sign-blob, --yes, --bundle, "${signature}", "${artifact}"]
 
 release:
   extra_files:
