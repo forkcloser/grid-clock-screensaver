@@ -4,14 +4,11 @@
 #   curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-screensaver/releases/latest/download/install.sh | bash
 #
 # That URL is this script as attached to the latest release, listed in its
-# checksums.txt: the one signed file it cannot verify for you before it runs
-# (the readme shows the by-hand check). cosign verification comes first, the
-# archive name comes from the verified checksums.txt rather than a guess, the
-# bundle is Developer ID signed and notarized, so its signing chain and the
-# stapled ticket are checked rather than bypassed, and the script stops rather
-# than downgrade
-# to checksum-only; --allow-unverified opts in. Why: DEVELOPMENT.md,
-# "Installer verification".
+# checksums.txt. It is the one file the installer cannot verify before it
+# runs; DEVELOPMENT.md, "Installer verification", shows the by-hand check and
+# explains the order below: the cosign signature on checksums.txt, the
+# archive's checksum, the bundle's Developer ID chain and stapled ticket.
+# Without cosign the script stops; --allow-unverified opts into checksum only.
 
 set -euo pipefail
 

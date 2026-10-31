@@ -17,14 +17,12 @@ dist: build/release
 # is skipped.
 before:
   hooks:
-    # The `build` recipe itself, not a twin of it: the tag becomes the bundle's
-    # version. The project file pins 0.0.0, so a bundle built any other way is
-    # recognisably unversioned.
+    # The tag becomes the bundle's version; the project file pins 0.0.0, so a
+    # bundle built any other way is recognisably unversioned.
     - just build Release {{ .Version }}
     # Asserts version, bundle identifier, arm64 only, minimum macOS and the
     # hardened signature, Developer ID when the release workflow provides the
-    # identity. v0.1.0 shipped universal, claiming 1.0.0 (1); this is the
-    # gate that would have caught it.
+    # identity.
     - just verify-bundle {{ .Version }}
     # Notarizes the signed bundle and staples the ticket, so a download
     # installs by double-click; skipped, and said so, where no identity is
