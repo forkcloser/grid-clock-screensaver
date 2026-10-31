@@ -52,8 +52,8 @@ so no saver can work around it. Documented first in
 ## Tooling
 
 The repository follows [limen](https://github.com/farcloser/limen): every tool
-except Xcode is pinned in `.aqua/aqua.yaml` and checksum-verified, and the commands
-are the ones CI runs.
+except Xcode is pinned in `.hermetic/hermetic.yaml` and checksum-verified, and
+the commands are the ones CI runs.
 
 ```sh
 just            # lint
@@ -63,8 +63,8 @@ just install    # build and copy into ~/Library/Screen Savers
 just --list     # everything else
 ```
 
-`xcodebuild` and `clang` come from the system toolchain, which aqua cannot
-pin. Without `just`:
+`xcodebuild` and `clang` come from the system toolchain, which hermetic
+cannot pin. Without `just`:
 
 ```sh
 xcodebuild -project 'Grid Clock.xcodeproj' -scheme 'Grid Clock' \
