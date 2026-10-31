@@ -100,7 +100,7 @@ if [ -z "$version" ]; then
     # /latest never returns a test tag.
     version=$(fetch "https://api.github.com/repos/${REPO}/releases/latest" \
         | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-        | head -1)
+        | head -1) || die "could not fetch the latest release — pass --version explicitly"
     [ -n "$version" ] || die "could not determine the latest release — pass --version explicitly"
 fi
 
