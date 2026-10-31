@@ -76,7 +76,7 @@ verify-bundle version=DEV_VERSION configuration='Release': (build configuration 
     }
     expect CFBundleShortVersionString '{{ version }}'
     expect CFBundleIdentifier '{{ BUNDLE_ID }}'
-    expect LSMinimumSystemVersion 14.0
+    expect LSMinimumSystemVersion 15.0
     expect NSPrincipalClass GridClock
     build_number=$(plutil -extract CFBundleVersion raw -o - "$plist")
     [[ "$build_number" =~ ^[1-9][0-9]*$ ]] || fail "CFBundleVersion is '$build_number', expected a positive integer"
@@ -99,9 +99,9 @@ verify-bundle version=DEV_VERSION configuration='Release': (build configuration 
         printf '%s\n' "$details" | grep -q '^Authority=Developer ID Application' || fail "signed, but not by the Developer ID Application identity"
         printf '%s\n' "$details" | grep -q '^Timestamp=' || fail "the Developer ID signature carries no timestamp"
         echo "  signature = Developer ID Application, timestamped"
-        echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 14.0+, hardened Developer ID signature intact"
+        echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 15.0+, hardened Developer ID signature intact"
     else
-        echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 14.0+, hardened ad-hoc signature intact"
+        echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 15.0+, hardened ad-hoc signature intact"
     fi
 
 # A bundle a human installs through System Settings is evaluated by

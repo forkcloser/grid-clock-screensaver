@@ -9,14 +9,14 @@ ones read out the time.
 
 ## Requirements
 
-macOS 14 or later, Apple silicon.
+macOS 15 or later, Apple silicon.
 
 ## Install
 
 Download the `grid-clock_<version>_arm64.zip` asset of the
 [latest release](https://github.com/forkcloser/grid-clock-screensaver/releases/latest),
-unzip it and double-click `Grid Clock.saver`. The release is signed and
-notarized; macOS installs it into `~/Library/Screen Savers`.
+unzip it and double-click `Grid Clock.saver`; macOS installs it into
+`~/Library/Screen Savers`.
 
 Or from a terminal:
 
@@ -45,7 +45,7 @@ launch).
 
 - **macOS 26:** System Settings → **Wallpaper** → **Screen Saver…** (top
   right). Grid Clock is in the last section, next to **Message**.
-- **macOS 14 and 15:** System Settings → **Screen Saver**, at the bottom of
+- **macOS 15:** System Settings → **Screen Saver**, at the bottom of
   the list under *Other*.
 
 ## Options

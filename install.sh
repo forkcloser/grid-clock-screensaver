@@ -79,8 +79,8 @@ done
 [ "$(uname -m)" = "arm64" ] || die "this build is for Apple silicon (arm64) only; uname says $(uname -m)"
 
 major=$(sw_vers -productVersion | cut -d. -f1)
-if [ "$major" -lt 14 ]; then
-    die "macOS 14 or later required (found $(sw_vers -productVersion)) — on 13 and earlier, run the original: https://github.com/chrstphrknwtn/grid-clock-screensaver"
+if [ "$major" -lt 15 ]; then
+    die "macOS 15 or later required (found $(sw_vers -productVersion))"
 fi
 
 for tool in curl ditto shasum codesign; do
@@ -221,4 +221,4 @@ echo "If System Settings is open, quit it with ⌘Q and reopen — it reads the"
 echo "screensaver list once at launch, so a running copy will not show Grid Clock."
 echo
 echo "  macOS 26 (Tahoe): System Settings -> Wallpaper -> Screen Saver... -> scroll to the bottom"
-echo "  macOS 14 / 15:    System Settings -> Screen Saver -> under Other"
+echo "  macOS 15:         System Settings -> Screen Saver -> under Other"
