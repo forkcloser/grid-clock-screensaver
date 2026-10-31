@@ -192,7 +192,7 @@ install configuration='Release': (build configuration DEV_VERSION)
     dest="$HOME/Library/Screen Savers"
     mkdir -p "$dest"
     rm -rf "$dest/{{ SAVER }}"
-    cp -R "build/Build/Products/{{ configuration }}/{{ SAVER }}" "$dest/"
+    ditto "build/Build/Products/{{ configuration }}/{{ SAVER }}" "$dest/{{ SAVER }}"
     echo "installed $dest/{{ SAVER }} — quit System Settings (⌘Q) and reopen if it is running"
 
 # Preferences are per-host and are left behind on purpose; the readme documents
