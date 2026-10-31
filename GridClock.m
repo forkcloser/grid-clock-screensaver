@@ -360,17 +360,22 @@ static void GCLocalHourMinute(NSDate *now, NSInteger *hour, NSInteger *minute) {
     [self updateVisibility];
 }
 
+// Whether the saver draws on a screen: always in the preview and in the
+// all-displays mode; in the main-only mode, on the screen anchored at the
+// origin of the global coordinate space, which is the main display, and on
+// a screen it cannot identify rather than leaving it black. Origins rather
+// than NSScreen identity, since macOS runs a saver process per display.
+static BOOL GCVisibleOnScreen(BOOL isPreview, GCDisplayMode mode, BOOL hasScreen, CGPoint screenOrigin) {
+    if (isPreview || mode != GCDisplayModeMainOnly) return YES;
+    return !hasScreen || CGPointEqualToPoint(screenOrigin, CGPointZero);
+}
+
 - (void)updateVisibility {
-    BOOL visible = YES;
-    if (!self.isPreview &&
-        [GridClock.defaults integerForKey:kDisplayModeKey] == GCDisplayModeMainOnly) {
-        // The main display is the one anchored at the origin of the global
-        // coordinate space. Comparing origins rather than NSScreen identity
-        // holds up even though macOS 14+ runs a separate saver process per
-        // display. If we can't tell, show it rather than leaving a black screen.
-        NSScreen *screen = self.window.screen;
-        visible = (screen == nil) || CGPointEqualToPoint(screen.frame.origin, CGPointZero);
-    }
+    NSScreen *screen = self.window.screen;
+    BOOL visible = GCVisibleOnScreen(self.isPreview,
+                                     (GCDisplayMode)[GridClock.defaults integerForKey:kDisplayModeKey],
+                                     screen != nil,
+                                     screen ? screen.frame.origin : CGPointZero);
     if (visible != _visibleOnThisScreen) {
         _visibleOnThisScreen = visible;
         [self setNeedsDisplay:YES];

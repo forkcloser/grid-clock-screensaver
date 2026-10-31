@@ -16,6 +16,7 @@
 //     Counting delivered frames would not: a loaded machine drops timer fires
 //     (NSTimer never makes up a missed one), which is a property of the
 //     scheduler, not of the saver.
+//  3. Visibility. GCVisibleOnScreen's five cases.
 //
 // GridClock.m is #included, as in parity.m, so the static helpers are reachable
 // and the shipped source is what is under test.
@@ -161,6 +162,19 @@ int main(void) {
               "20 settled frames re-armed nothing (%ld arm(s)) — a re-arming frame would spin the timer",
               (long)(view->arms - armsAfterSettle));
         [view stopAnimation];
+
+        // 3. Visibility: GCVisibleOnScreen's five cases.
+        CGPoint origin = CGPointZero, elsewhere = CGPointMake(-1920, 0);
+        CHECK(GCVisibleOnScreen(YES, GCDisplayModeMainOnly, YES, elsewhere),
+              "the preview draws whatever the mode and the screen");
+        CHECK(GCVisibleOnScreen(NO, GCDisplayModeAllDisplays, YES, elsewhere),
+              "all-displays mode draws on a screen away from the origin");
+        CHECK(GCVisibleOnScreen(NO, GCDisplayModeMainOnly, YES, origin),
+              "main-only mode draws on the screen at the origin");
+        CHECK(!GCVisibleOnScreen(NO, GCDisplayModeMainOnly, YES, elsewhere),
+              "main-only mode does not draw on a screen away from the origin");
+        CHECK(GCVisibleOnScreen(NO, GCDisplayModeMainOnly, NO, origin),
+              "main-only mode draws when the screen is unknown");
     }
     if (failures) {
         printf("runtime: %d check(s) failed\n", failures);
