@@ -1,7 +1,7 @@
-# Diverges from limen's canonical release.yaml in `runs-on`, in the project
-# steps marked below (the Developer ID identity, the notarization
-# credentials, their removal), and in the attest step's subject paths, this
-# project's. Keep everything else in sync.
+# Diverges from limen's canonical release.yaml in `runs-on`, in the job's
+# `environment`, in the project steps marked below (the Developer ID identity,
+# the notarization credentials, their removal), and in the attest step's
+# subject paths, this project's. Keep everything else in sync.
 #
 # The workflow half of the release lane:
 # `just do release vX.Y.Z` verifies the tree, creates the SIGNED tag and
@@ -35,6 +35,11 @@ jobs:
     # xcodebuild.
     runs-on: macos-15
     timeout-minutes: 30
+    # The signing and notarization secrets are the `release` environment's,
+    # which only a v* tag may deploy to and which waits for the owner's
+    # approval: a workflow on any other ref is refused them by GitHub, whatever
+    # the file says.
+    environment: release
     permissions:
       # Publish the GitHub release and its assets.
       contents: write
@@ -63,7 +68,7 @@ jobs:
       # is evaluated by Gatekeeper, so it is signed, notarized and stapled.
       # The certificate goes into a keychain made for this job and deleted at
       # its end, never into the login keychain and never onto disk
-      # unencrypted. A tag pushed without the secrets fails here, before
+      # unencrypted. An environment without the secrets fails here, before
       # anything builds.
       - name: Signing identity
         env:

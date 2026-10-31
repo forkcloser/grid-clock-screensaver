@@ -143,10 +143,12 @@ notes GitHub writes from the pull requests merged since the previous tag, and
 the build provenance attestation over every asset. Pushing `v*` tags is
 restricted by a repository ruleset.
 
-The workflow reads five repository secrets: `APPLE_DEVELOPER_ID_P12` and
-`APPLE_DEVELOPER_ID_P12_PASSWORD` (the certificate, base64, and its password),
-and for notarization `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and
-`APPLE_NOTARY_KEY` (an App Store Connect API key: its id, the issuer id, and
-the `.p8` base64). A tag pushed without them fails before anything builds. A
-local `just do release --local --dry-run` has no identity: it builds ad hoc,
-skips notarization and says so.
+The workflow's job runs in the `release` environment, which holds the five
+secrets: `APPLE_DEVELOPER_ID_P12` and `APPLE_DEVELOPER_ID_P12_PASSWORD` (the
+certificate, base64, and its password), and for notarization
+`APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and `APPLE_NOTARY_KEY` (an App
+Store Connect API key: its id, the issuer id, and the `.p8` base64). Only a
+`v*` tag may deploy to the environment and each run waits for the owner's
+approval, so a workflow on a branch cannot read them. A local
+`just do release --local --dry-run` has no identity: it builds ad hoc, skips
+notarization and says so.
