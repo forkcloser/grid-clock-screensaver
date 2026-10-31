@@ -75,8 +75,11 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(uname -s)" = "Darwin" ] || die "this is a macOS screensaver; uname says $(uname -s)"
-# Fail before the download: no release carries an x86_64-only build.
-[ "$(uname -m)" = "arm64" ] || die "this build is for Apple silicon (arm64) only; uname says $(uname -m)"
+# Fail before the download: no release carries an x86_64 build. uname reports
+# the shell's architecture, x86_64 under Rosetta; hw.optional.arm64 is the
+# hardware's.
+[ "$(uname -m)" = "arm64" ] || [ "$(sysctl -n hw.optional.arm64 2> /dev/null)" = "1" ] \
+    || die "this build is for Apple silicon (arm64) only; uname says $(uname -m)"
 
 major=$(sw_vers -productVersion | cut -d. -f1)
 if [ "$major" -lt 15 ]; then
