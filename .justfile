@@ -27,10 +27,11 @@ test: test-parity test-runtime test-bundle verify-bundle
 # passes the tag, everything else gets DEV_VERSION. CFBundleVersion must be an
 # integer that only grows; the commit count is one, so a shallow clone (which
 # would undercount) is refused rather than shipped. The signature is ad hoc
-# (the project's "-") unless GRID_CLOCK_SIGN_IDENTITY names an identity, the
-# release workflow's Developer ID Application; that one is timestamped, as
-# notarization requires, and signed under GRID_CLOCK_SIGN_TEAM, the team
-# manual signing asks for beside the identity (the project pins none).
+# (the project's "-") unless APPLE_SIGN_IDENTITY names an identity, the Apple
+# release lane's Developer ID Application (limen's book/releasing.md); that
+# one is timestamped, as notarization requires, and signed under
+# APPLE_SIGN_TEAM, the team manual signing asks for beside the identity (the
+# project pins none).
 [doc('Build the .saver bundle (configuration: Release or Debug; version: what the bundle claims to be)')]
 build configuration='Release' version=DEV_VERSION:
     #!/usr/bin/env bash
@@ -40,12 +41,12 @@ build configuration='Release' version=DEV_VERSION:
         exit 1
     fi
     build_number=$(git rev-list --count HEAD)
-    identity="${GRID_CLOCK_SIGN_IDENTITY:--}"
+    identity="${APPLE_SIGN_IDENTITY:--}"
     flags=""
     team=""
     if [ "$identity" != "-" ]; then
         flags="--timestamp"
-        team="${GRID_CLOCK_SIGN_TEAM:?GRID_CLOCK_SIGN_TEAM is unset: a signing identity needs its team}"
+        team="${APPLE_SIGN_TEAM:?APPLE_SIGN_TEAM is unset: a signing identity needs its team}"
     fi
     xcodebuild -project '{{ XCODE_PROJECT }}' -scheme '{{ XCODE_SCHEME }}' \
         -configuration '{{ configuration }}' -destination 'generic/platform=macOS' \
@@ -89,101 +90,61 @@ verify-bundle version=DEV_VERSION configuration='Release': (build configuration 
         *) fail "hardened runtime flag missing (flags=$flags)" ;;
     esac
     echo "  codesign = valid, flags=$flags"
-    # The release signs with the Developer ID identity the workflow imports;
-    # the signature must then be that identity's, timestamped. Anything else
-    # is ad hoc, which a local build is.
-    if [ -n "${GRID_CLOCK_SIGN_IDENTITY:-}" ]; then
-        printf '%s\n' "$details" | grep -q '^Authority=Developer ID Application' || fail "signed, but not by the Developer ID Application identity"
-        printf '%s\n' "$details" | grep -q '^Timestamp=' || fail "the Developer ID signature carries no timestamp"
-        echo "  signature = Developer ID Application, timestamped"
-        echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 15.0+, hardened Developer ID signature intact"
+    # With an identity exported (the release lane's sign job) the signature
+    # must be that identity's, timestamped: the shared verdict. Without one
+    # the build is ad hoc by construction, on a laptop and on the verify lane
+    # alike, and the codesign check above is the whole verdict.
+    if [ -n "${APPLE_SIGN_IDENTITY:-}" ]; then
+        just do apple-verify-signed "$saver"
     else
-        echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 15.0+, hardened ad-hoc signature intact"
+        echo "  signature = ad hoc (no identity exported)"
     fi
+    echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 15.0+, hardened runtime, signature intact"
 
-# A bundle a human installs through System Settings is evaluated by
-# Gatekeeper, which accepts a Developer ID signature only once Apple has
-# notarized it; the ticket is stapled so the check needs no network. Without
-# an identity (a local build or dry run) there is nothing to notarize and the
-# recipe says so; with one and no credentials it fails, since a Developer ID
-# build that leaves here unnotarized would be refused on every install. The
-# verdict is notarytool's own "status: Accepted": --wait's exit status is not
-# it, and spctl has no assessment for a plug-in (its execute type answers for
-# app bundles alone).
-[doc('Notarize the signed .saver with notarytool and staple the ticket (release only)')]
-notarize version=DEV_VERSION configuration='Release':
+# The release assets, as goreleaser publishes them: the notarized bundle in a
+# zip and the installer beside it, under .build/assets/, where the Apple
+# release lane's sign job picks them up for publish. A bundle a human installs
+# through System Settings is evaluated by Gatekeeper, so it is notarized and
+# the ticket stapled (`just do apple-notarize`: nothing to do for an ad hoc
+# local build); ditto keeps the signature intact in the zip
+# (`just do apple-package`).
+[doc('Build, verify, notarize and zip the .saver with the installer into .build/assets/')]
+package version=DEV_VERSION configuration='Release': (verify-bundle version configuration)
     #!/usr/bin/env bash
     set -euo pipefail
     saver='build/Build/Products/{{ configuration }}/{{ SAVER }}'
-    if [ -z "${GRID_CLOCK_SIGN_IDENTITY:-}" ]; then
-        echo "notarize: no signing identity, the bundle is ad hoc signed — nothing to notarize"
-        exit 0
-    fi
-    for v in GRID_CLOCK_NOTARY_KEY GRID_CLOCK_NOTARY_KEY_ID GRID_CLOCK_NOTARY_ISSUER_ID; do
-        [ -n "${!v:-}" ] || { echo "notarize: $v is not set; a Developer ID build must be notarized" >&2; exit 1; }
-    done
-    mkdir -p build/notarize
-    archive='build/notarize/{{ SAVER }}.zip'
-    rm -f "$archive"
-    ditto -c -k --sequesterRsrc --keepParent "$saver" "$archive"
-    key=(--key "${GRID_CLOCK_NOTARY_KEY:?}" --key-id "${GRID_CLOCK_NOTARY_KEY_ID:?}" --issuer "${GRID_CLOCK_NOTARY_ISSUER_ID:?}")
-    submission=$(xcrun notarytool submit "$archive" --wait "${key[@]}" 2>&1 | tee /dev/stderr) || true
-    id=$(printf '%s\n' "$submission" | sed -n 's/^ *id: \([0-9a-f-]*\)$/\1/p' | head -n 1)
-    if ! printf '%s\n' "$submission" | grep -q '^ *status: Accepted$'; then
-        echo "notarize: Apple did not accept the submission${id:+ $id}" >&2
-        [ -z "$id" ] || xcrun notarytool log "$id" "${key[@]}" >&2 || true
-        exit 1
-    fi
-    xcrun stapler staple "$saver"
-    xcrun stapler validate "$saver"
-    echo "notarize: {{ SAVER }} {{ version }} notarized (submission ${id:-?}), ticket stapled"
-
-# The release assets, as goreleaser publishes them: the notarized bundle in a
-# zip and the installer beside it, under build/assets/. ditto, not zip: it is
-# the archiver that keeps a bundle's extended attributes and code signature
-# intact. The release workflow's sign job runs this; the publish job and a
-# local dry run hand the result to goreleaser, which runs verify-assets.
-[doc('Build, verify, notarize and zip the .saver with the installer into build/assets/')]
-package version=DEV_VERSION configuration='Release': (verify-bundle version configuration) (notarize version configuration)
-    #!/usr/bin/env bash
-    set -euo pipefail
-    mkdir -p build/assets
-    rm -f build/assets/*.zip
-    ditto -c -k --sequesterRsrc --keepParent 'build/Build/Products/{{ configuration }}/{{ SAVER }}' 'build/assets/grid-clock_{{ version }}_arm64.zip'
-    cp install.sh build/assets/install.sh
-    echo "packaged build/assets/grid-clock_{{ version }}_arm64.zip and build/assets/install.sh"
+    just do apple-notarize "$saver"
+    mkdir -p .build/assets
+    rm -f .build/assets/*.zip
+    just do apple-package "$saver" '.build/assets/grid-clock_{{ version }}_arm64.zip'
+    cp install.sh .build/assets/install.sh
+    echo "packaged .build/assets/grid-clock_{{ version }}_arm64.zip and .build/assets/install.sh"
 
 # What goreleaser is handed must be the release's bundle: the zip for this
-# version, carrying a bundle of this version whose signature verifies. In
-# GitHub Actions that signature must be a timestamped Developer ID one with
-# the notarization ticket stapled; a local dry run's bundle is ad hoc and is
-# accepted as such.
-[doc("Assert build/assets/ holds this version's installer and a bundle whose signature verifies")]
+# version, carrying a bundle of this version whose signature verifies
+# (`just do apple-verify-signed`: Developer ID and timestamped in GitHub
+# Actions, ad hoc accepted for a local dry run) with the notarization ticket
+# stapled wherever the signature is Developer ID's.
+[doc("Assert .build/assets/ holds this version's installer and a bundle whose signature verifies")]
 verify-assets version=DEV_VERSION:
     #!/usr/bin/env bash
     set -euo pipefail
     fail() { echo "verify-assets: $*" >&2; exit 1; }
-    archive='build/assets/grid-clock_{{ version }}_arm64.zip'
+    archive='.build/assets/grid-clock_{{ version }}_arm64.zip'
     [ -f "$archive" ] || fail "$archive is missing"
-    [ -f build/assets/install.sh ] || fail "build/assets/install.sh is missing"
-    cmp -s install.sh build/assets/install.sh || fail "build/assets/install.sh differs from install.sh"
-    rm -rf build/assets-verify
-    ditto -x -k "$archive" build/assets-verify
-    saver='build/assets-verify/{{ SAVER }}'
+    [ -f .build/assets/install.sh ] || fail ".build/assets/install.sh is missing"
+    cmp -s install.sh .build/assets/install.sh || fail ".build/assets/install.sh differs from install.sh"
+    rm -rf .build/assets-verify
+    ditto -x -k "$archive" .build/assets-verify
+    saver='.build/assets-verify/{{ SAVER }}'
     [ -d "$saver" ] || fail "$archive does not contain {{ SAVER }}"
     actual=$(plutil -extract CFBundleShortVersionString raw -o - "$saver/Contents/Info.plist")
     [ "$actual" = '{{ version }}' ] || fail "the bundle is version '$actual', expected '{{ version }}'"
-    codesign --verify --deep --strict "$saver" || fail "the code signature does not verify"
-    details=$(codesign -d --verbose=2 "$saver" 2>&1)
-    if printf '%s\n' "$details" | grep -q '^Authority=Developer ID Application'; then
-        printf '%s\n' "$details" | grep -q '^Timestamp=' || fail "the Developer ID signature carries no timestamp"
-        [ -f "$saver/Contents/CodeResources" ] || fail "no notarization ticket is stapled"
-        xcrun stapler validate "$saver" || fail "the stapled ticket does not validate"
-        echo "verify-assets: $archive holds {{ SAVER }} {{ version }}, Developer ID signed, timestamped, ticket stapled"
-    else
-        [ -z "${GITHUB_ACTIONS:-}" ] || fail "the bundle is not Developer ID signed; a release built in GitHub Actions must be"
-        echo "verify-assets: $archive holds {{ SAVER }} {{ version }}, ad hoc signed (a local dry run)"
+    just do apple-verify-signed "$saver"
+    if codesign -d --verbose=2 "$saver" 2>&1 | grep -q '^Authority=Developer ID Application'; then
+        just do apple-verify-notarized "$saver"
     fi
+    echo "verify-assets: $archive holds {{ SAVER }} {{ version }}"
 
 # GridClock.m is compiled into the harness directly: the shipped source is what
 # is tested, not a copy of its logic. test/regenerate-golden.js produces the
