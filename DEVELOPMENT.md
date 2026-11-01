@@ -102,9 +102,12 @@ nothing strips the quarantine attribute. A local build is ad hoc signed and
 loads from `~/Library/Screen Savers` without going through Gatekeeper. The
 installer establishes trust in this order:
 
-1. **cosign** verifies `checksums.txt` against the release workflow's keyless
-   signature: the identity is this repository's `release.yaml` at a `v*` tag,
-   certified by Fulcio and recorded in Rekor. No key exists to be stolen.
+1. **cosign** verifies `checksums.txt` against the release lane's keyless
+   signature, certified by Fulcio and recorded in Rekor: the identity is
+   limen's `limen-release-apple.yaml`, the reusable workflow this repository's
+   `release.yaml` calls, and the certificate's GitHub extensions name this
+   repository and the release's tag, which cosign matches as well. No key
+   exists to be stolen.
 2. The bundle's SHA-256 is checked against that file.
 3. The archive is expanded, the bundle's code signature verified, its
    signing chain required to be Apple's Developer ID one, and the stapled
@@ -124,7 +127,9 @@ in `checksums.txt`, so to check everything by hand first:
 cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
-    'https://github.com/forkcloser/grid-clock-screensaver/\.github/workflows/release\.yaml@refs/tags/v.*' \
+    '^https://github.com/farcloser/limen/\.github/workflows/limen-release-apple\.yaml@' \
+  --certificate-github-workflow-repository forkcloser/grid-clock-screensaver \
+  --certificate-github-workflow-ref refs/tags/vX.Y.Z \
   checksums.txt
 shasum -a 256 -c checksums.txt   # the archive and install.sh
 ```
@@ -132,33 +137,23 @@ shasum -a 256 -c checksums.txt   # the archive and install.sh
 ## Releases
 
 `just do release vX.Y.Z` verifies a clean tree, creates a signed tag and pushes
-it. The tag push runs the release workflow's two jobs. Pushing `v*` tags is
-restricted by a repository ruleset.
+it. The tag push runs the release workflow, a thin caller of limen's Apple
+release lane (`limen-release-apple.yaml`), whose two jobs, what each holds and
+what each verifies are limen's
+[`book/releasing.md`](https://github.com/farcloser/limen/blob/main/book/releasing.md).
+Pushing `v*` tags is restricted by a repository ruleset.
 
-The `sign` job is the only one with the certificate. It runs in the `release`
-environment, which holds the five secrets: `APPLE_DEVELOPER_ID_P12` and
-`APPLE_DEVELOPER_ID_P12_PASSWORD` (the certificate, base64, and its password),
-and for notarization `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and
-`APPLE_NOTARY_KEY` (an App Store Connect API key: its id, the issuer id, and
-the `.p8` base64). Only a `v*` tag may deploy to the environment and each run
-waits for the owner's approval, so a workflow on a branch cannot read them.
-The certificate is imported into a keychain made for the job and its team id
-read off the identity's name; `just package` builds the bundle with the tag
-as its version, signed with that identity under that team, asserts the
-signature is the identity's and timestamped (`verify-bundle`), submits it
-with `notarytool` and staples the ticket (`notarize`), and zips it with the
-installer into `build/assets/`. The keychain and the key are then deleted and
-the assets uploaded as a run artifact, so while the identity is in its
-keychain only the pinned toolchain and Apple's tools run; the job's token is
-read-only.
-
-The `publish` job has no Apple secret. It downloads the assets, and
-`just do release --ci` runs goreleaser: `verify-assets` checks that what
-arrived is this version's installer and a bundle of this version with a
-timestamped Developer ID signature and a stapled ticket, then the keyless
-cosign signature on `checksums.txt`, the GitHub release, whose notes GitHub
-writes from the pull requests merged since the previous tag, and the build
-provenance attestation over every asset.
+What is this project's: the `release` environment holds the five secrets the
+lane reads, `APPLE_DEVELOPER_ID_P12` and `APPLE_DEVELOPER_ID_P12_PASSWORD` (the
+certificate, base64, and its password), and for notarization
+`APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` and `APPLE_NOTARY_KEY` (an App
+Store Connect API key: its id, the issuer id, and the `.p8` base64); only a
+`v*` tag may deploy to it and each run waits for the owner's approval. The lane
+runs `just package <version>`, which builds the bundle signed with the exported
+identity, asserts it with `verify-bundle`, notarizes and staples it
+(`just do apple-notarize`) and zips it with the installer into `.build/assets/`
+(`just do apple-package`); goreleaser's before hook runs
+`just verify-assets <version>` on what arrived in `publish`.
 
 A local `just package && just do release --local --dry-run` has no identity:
 it builds ad hoc, skips notarization and says so, and `verify-assets` accepts

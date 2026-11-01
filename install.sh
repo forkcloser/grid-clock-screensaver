@@ -14,7 +14,11 @@ set -euo pipefail
 
 REPO="forkcloser/grid-clock-screensaver"
 SAVER="Grid Clock.saver"
-CERT_IDENTITY="^https://github.com/${REPO}/\.github/workflows/release\.yaml@refs/tags/v.*$"
+# The signer is limen's Apple release lane, the reusable workflow this
+# repository's release.yaml calls: Fulcio names the reusable workflow in the
+# certificate's identity, and the calling repository and its tag in the
+# certificate's GitHub extensions, which cosign matches separately below.
+CERT_IDENTITY="^https://github.com/farcloser/limen/\.github/workflows/limen-release-apple\.yaml@"
 CERT_ISSUER="https://token.actions.githubusercontent.com"
 REPORT_URL="https://github.com/${REPO}/security/advisories/new"
 
@@ -137,9 +141,11 @@ elif command -v cosign > /dev/null 2>&1; then
         --bundle "$workdir/checksums.txt.sigstore.json" \
         --certificate-oidc-issuer "$CERT_ISSUER" \
         --certificate-identity-regexp "$CERT_IDENTITY" \
+        --certificate-github-workflow-repository "$REPO" \
+        --certificate-github-workflow-ref "refs/tags/$version" \
         "$workdir/checksums.txt" \
         || die "SIGNATURE VERIFICATION FAILED — do not install this. Report it privately at $REPORT_URL"
-    echo "signature ok: signed by ${REPO}'s release workflow at a v* tag"
+    echo "signature ok: signed by limen's Apple release lane for ${REPO} at $version"
 else
     die "cosign not found, so the release cannot be authenticated.
 

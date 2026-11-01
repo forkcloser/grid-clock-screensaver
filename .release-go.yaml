@@ -1,17 +1,17 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # goreleaser — https://goreleaser.com — release automation for Grid Clock.
 # Local dry-run: `just package && just do release --local --dry-run` (no tag, no
-# publish, artifacts under build/release/). Real release: `just do release
+# publish, artifacts under .build/release/). Real release: `just do release
 # vX.Y.Z` (see .limen/just/release.just).
 version: 2
 
 project_name: grid-clock
 
-# Everything lands under build/release/ — covered by the canonical .gitignore
-# (/build); goreleaser's default dist/ is not. A subdirectory of build/, not
-# build/ itself: goreleaser --clean wipes its dist directory, and the Xcode
-# derived data the build recipe puts in build/ must survive a release run.
-dist: build/release
+# limen's model: .build/release/, where the Apple release lane's attest step
+# looks for checksums.txt, covered by the canonical .gitignore (/.build). The
+# Xcode derived data the build recipe puts in build/ is untouched by
+# goreleaser --clean, which wipes its dist directory alone.
+dist: .build/release
 
 # goreleaser cannot drive Xcode (the `prebuilt` builder is Pro-only): the
 # assets are made by `just package` before goreleaser runs, in the release
@@ -45,8 +45,8 @@ checksum:
   # otherwise be empty.
   name_template: checksums.txt
   extra_files:
-    - glob: build/assets/*.zip
-    - glob: build/assets/install.sh
+    - glob: .build/assets/*.zip
+    - glob: .build/assets/install.sh
 
 # cosign (v3, Sigstore bundle format) over the checksums file — signing that one
 # file transitively covers every artifact it lists. Keyless: cosign exchanges
@@ -62,8 +62,8 @@ signs:
 
 release:
   extra_files:
-    - glob: build/assets/*.zip
-    - glob: build/assets/install.sh
+    - glob: .build/assets/*.zip
+    - glob: .build/assets/install.sh
   # Any prerelease-suffixed tag (e.g. the disposable v0.0.0-test.N tags used to
   # exercise the pipeline) is published as a GitHub prerelease, so it can never
   # become the repo's "latest release".
