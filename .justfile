@@ -90,15 +90,10 @@ verify-bundle version=DEV_VERSION configuration='Release': (build configuration 
         *) fail "hardened runtime flag missing (flags=$flags)" ;;
     esac
     echo "  codesign = valid, flags=$flags"
-    # With an identity exported (the release lane's sign job) the signature
-    # must be that identity's, timestamped: the shared verdict. Without one
-    # the build is ad hoc by construction, on a laptop and on the verify lane
-    # alike, and the codesign check above is the whole verdict.
-    if [ -n "${APPLE_SIGN_IDENTITY:-}" ]; then
-        just do apple-verify-signed "$saver"
-    else
-        echo "  signature = ad hoc (no identity exported)"
-    fi
+    # The signature's authority is the shared verdict: Developer ID and
+    # timestamped on a release run (an identity exported, or a tag), ad hoc
+    # accepted elsewhere, the verify lane's build included.
+    just do apple-verify-signed "$saver"
     echo "verify-bundle: {{ SAVER }} is {{ version }}, arm64, macOS 15.0+, hardened runtime, signature intact"
 
 # The release assets, as goreleaser publishes them: the notarized bundle in a
