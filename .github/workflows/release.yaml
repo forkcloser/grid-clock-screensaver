@@ -12,4 +12,14 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    secrets: inherit
+    # Passed by name, not inherited: `inherit` passes this workflow's scope,
+    # where an environment's secret is nothing, so the lane's sign job read
+    # them empty (v0.0.0-test.5). A secret passed by name is resolved in the
+    # called job that declares the environment, GitHub's documented case.
+    secrets:
+      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
