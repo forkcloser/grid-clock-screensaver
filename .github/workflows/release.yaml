@@ -1,15 +1,42 @@
+# DO NOT EDIT MANUALLY: content-pinned by limen, reset by `limen fix`;
+# the uses: reference is Renovate's.
+# The Apple release lane: `just do release vX.Y.Z` verifies the tree, creates
+# the SIGNED tag and pushes it; that push runs limen-release-apple.yaml from
+# farcloser/limen at the referenced commit (book/releasing.md). Its sign job
+# holds the release environment's credentials and runs this project's
+# `package`; its publish job holds none and runs `just do release --ci`. Pair
+# with the limen:tags ruleset: the tag push is the release button.
 name: release
+
 on:
   push:
     tags: ["v*"]
+
 permissions: {}
+
+# One run PER TAG, never cancelled: keyed by ref, not a constant — a constant
+# group keeps only the newest pending run, so pushing several tags at once
+# silently cancels the older releases.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
+
 jobs:
   release:
     uses: farcloser/limen/.github/workflows/limen-release-apple.yaml@2d32ac07f60aa31045e91d8db6515d86ad0f07e1 # v0.23.1
+    # What the called jobs need, publish's being the larger: the release and
+    # its assets, keyless signing, the provenance attestations.
     permissions:
       contents: write
       id-token: write
       attestations: write
-    secrets: inherit
+    # By name, never inherit: inherit reaches a lane in another organization
+    # with nothing. A name the caller's scope lacks still reaches the called
+    # sign job, which declares the release environment and resolves it there;
+    # a run on any other ref is refused them.
+    secrets:
+      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
