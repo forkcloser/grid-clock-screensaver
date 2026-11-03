@@ -21,6 +21,9 @@ SAVER="Grid Clock.saver"
 CERT_IDENTITY="^https://github.com/farcloser/limen/\.github/workflows/limen-release-apple\.yaml@"
 CERT_ISSUER="https://token.actions.githubusercontent.com"
 REPORT_URL="https://github.com/${REPO}/security/advisories/new"
+# The Developer ID team the bundle is signed by: any other team's Developer
+# ID signature is refused, however valid its chain.
+TEAM_ID="377QL68Y3P"
 
 version=""
 prefix="$HOME/Library/Screen Savers"
@@ -189,15 +192,15 @@ echo "code signature intact"
 # accepts it when System Settings loads it. What is checked here is what a
 # plug-in lets a script check (spctl assesses app bundles alone): the
 # signature's chain is Apple's Developer ID one, the requirement every
-# Developer ID Application signature satisfies, and the stapled ticket is
-# present, the file stapler writes into a bundle.
+# Developer ID Application signature satisfies, its leaf is TEAM_ID's, and
+# the stapled ticket is present, the file stapler writes into a bundle.
 codesign --verify --deep --strict \
-    -R='anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13]' \
+    -R="anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
     "$workdir/extracted/$SAVER" \
-    || die "the bundle is not signed with a Developer ID — not installing"
+    || die "the bundle is not signed with team $TEAM_ID's Developer ID — not installing"
 [ -f "$workdir/extracted/$SAVER/Contents/CodeResources" ] \
     || die "the bundle carries no notarization ticket — not installing"
-echo "Developer ID signature verified, notarization ticket present"
+echo "Developer ID signature of team $TEAM_ID verified, notarization ticket present"
 
 if [ -e "$prefix/$SAVER" ]; then
     echo "replacing the existing $prefix/$SAVER"
