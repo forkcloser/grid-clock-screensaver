@@ -55,10 +55,14 @@ checksum:
 # book/releasing.md, "The signing and provenance policy"); a local dry run
 # skips signing.
 signs:
-  - cmd: cosign
+  - cmd: just
     artifacts: checksum
     signature: "${artifact}.sigstore.json"
-    args: [sign-blob, --yes, --bundle, "${signature}", "${artifact}"]
+    args:
+      - do
+      - release-sign
+      - "${artifact}"
+      - "${signature}"
 
 release:
   extra_files:
