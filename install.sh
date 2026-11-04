@@ -136,7 +136,18 @@ if [ -n "$allow_unverified" ]; then
     echo "WARNING: --allow-unverified — the checksums file is NOT being authenticated." >&2
     echo "         A tampered release would pass this run. You are trusting the network." >&2
     echo
-elif command -v cosign > /dev/null 2>&1; then
+elif ! command -v cosign > /dev/null 2>&1; then
+    die "cosign not found, so the release cannot be authenticated.
+
+Install it (brew install cosign), or re-run with --allow-unverified to
+proceed on checksum alone — which proves the download is intact, but not
+who produced it."
+# A cosign that cannot run would make every release look tampered with.
+elif ! cosign version > /dev/null 2>&1; then
+    die "$(command -v cosign) does not run (cosign version fails), so the release cannot be
+authenticated. Repair or reinstall cosign, or re-run with --allow-unverified
+to proceed on checksum alone."
+else
     fetch -o "$workdir/checksums.txt.sigstore.json" "$base/checksums.txt.sigstore.json" \
         || die "could not download the signature (checksums.txt.sigstore.json)"
     echo "verifying the signature..."
@@ -149,12 +160,6 @@ elif command -v cosign > /dev/null 2>&1; then
         "$workdir/checksums.txt" \
         || die "SIGNATURE VERIFICATION FAILED — do not install this. Report it privately at $REPORT_URL"
     echo "signature ok: signed by limen's Apple release lane for ${REPO} at $version"
-else
-    die "cosign not found, so the release cannot be authenticated.
-
-Install it (brew install cosign), or re-run with --allow-unverified to
-proceed on checksum alone — which proves the download is intact, but not
-who produced it."
 fi
 
 # The archive must be listed by the (now trusted) manifest: exact match on the
