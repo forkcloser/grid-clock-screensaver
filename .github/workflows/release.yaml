@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   release:
-    uses: farcloser/limen/.github/workflows/limen-release-apple.yaml@56ef4e8a97ae7666a759b353a94be77e0ea05d12 # v0.26.0
+    uses: farcloser/limen/.github/workflows/limen-release-apple.yaml@d5b713ec26861f47ece42575c46c90eb3599a201 # v0.27.0
     # What the called jobs need, publish's being the larger: the release and
     # its assets, keyless signing, the provenance attestations.
     permissions:
