@@ -26,8 +26,9 @@ curl --proto '=https' --tlsv1.2 -fsSL https://github.com/forkcloser/grid-clock-s
 
 The installer verifies the release with [cosign](https://github.com/sigstore/cosign)
 (`brew install cosign`) and installs into `~/Library/Screen Savers`;
-`--system` installs for all users, `--version X.Y.Z` pins a release, `--help`
-lists the rest. Verifying the assets yourself:
+`--system` installs for all users, `--version X.Y.Z` pins a release from 1.2.0
+on (for an earlier one it gives the command of that release's own installer),
+`--help` lists the rest. Verifying the assets yourself:
 [DEVELOPMENT.md](./DEVELOPMENT.md#installer-verification).
 
 From source, with Xcode installed:

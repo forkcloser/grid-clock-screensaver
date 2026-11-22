@@ -117,8 +117,15 @@ installer establishes trust in this order:
 
 Without cosign the script stops; `--allow-unverified` opts into a checksum-only
 install explicitly. The install one-liner fetches the installer attached to the
-latest release, not the copy on `main`, and reads the archive name from the
-signed `checksums.txt`, so `--version` works for older releases too.
+latest release, not the copy on `main`, and installs an archive only when the
+signed `checksums.txt` lists it.
+
+`--version` installs a release from 1.2.0 on. The three before it (0.1.0,
+1.0.0, 1.1.0) are ad hoc signed, and their `checksums.txt` is signed by this
+repository's own release workflow of the time, not by limen's lane: every
+check above fails on them, genuine as they are. The installer therefore
+answers such a version before it fetches anything, with the command of the
+installer attached to that release, which installs it.
 
 The script cannot verify itself before it runs. It is a release asset listed
 in `checksums.txt`, so to check everything by hand first:
