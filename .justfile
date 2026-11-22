@@ -20,7 +20,7 @@ lint: do::lint::default
 fix: do::fix::default
 # The security workflow runs `just security`.
 security: do::security::default
-test: test-parity test-runtime test-bundle verify-bundle
+test: test-parity test-runtime test-bundle verify-bundle test-installer
 
 # -destination generic/platform=macOS keeps the build independent of the host
 # machine. The version is an argument, not a project setting: the release
@@ -182,6 +182,12 @@ test-bundle configuration='Release': (build configuration DEV_VERSION)
         -framework Cocoa -framework ScreenSaver \
         -o build/test/load test/load.m
     build/test/load "build/Build/Products/{{ configuration }}/{{ SAVER }}" build/test/render.png
+
+# Only what the installer answers without the network: a release is not
+# downloaded here.
+[doc('Installer test: a version before the first it installs is told so, with nothing fetched')]
+test-installer:
+    bash test/installer.sh
 
 # System Settings reads the screensaver list once at launch: quit it (⌘Q) first
 # or the saver will not appear.

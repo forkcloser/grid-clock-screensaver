@@ -24,6 +24,10 @@ REPORT_URL="https://github.com/${REPO}/security/advisories/new"
 # The Developer ID team the bundle is signed by: any other team's Developer
 # ID signature is refused, however valid its chain.
 TEAM_ID="377QL68Y3P"
+# The first release signed by CERT_IDENTITY and by TEAM_ID, as its major and
+# minor numbers: the first this installer installs.
+OLDEST_MAJOR=1
+OLDEST_MINOR=2
 
 version=""
 prefix="$HOME/Library/Screen Savers"
@@ -33,7 +37,7 @@ usage() {
     cat >&2 <<EOF
 usage: install.sh [options]
 
-  --version <X.Y.Z>    install this release, with or without the v (default: the latest release)
+  --version <X.Y.Z>    install this release, v${OLDEST_MAJOR}.${OLDEST_MINOR}.0 or later, with or without the v (default: the latest)
   --prefix <dir>       install here (default: ~/Library/Screen Savers)
   --system             install for all users in /Library/Screen Savers (needs sudo)
   --allow-unverified   proceed without cosign — checksum only, NOT recommended
@@ -123,6 +127,19 @@ printf '%s' "$version" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za
 # goreleaser keys asset names on the version WITHOUT the v.
 bare="${version#v}"
 base="https://github.com/${REPO}/releases/download/${version}"
+
+# Before anything is fetched or verified: a genuine earlier release fails the
+# checks below, which would call it tampered with.
+release_major="${bare%%.*}"
+release_minor="${bare#*.}"
+release_minor="${release_minor%%.*}"
+if [ "$release_major" -lt "$OLDEST_MAJOR" ] \
+    || { [ "$release_major" -eq "$OLDEST_MAJOR" ] && [ "$release_minor" -lt "$OLDEST_MINOR" ]; }; then
+    die "this installer installs v${OLDEST_MAJOR}.${OLDEST_MINOR}.0 and later, and ${version} is earlier.
+An earlier release is installed with its own installer:
+
+  curl --proto '=https' --tlsv1.2 -fsSL ${base}/install.sh | bash -s -- --version ${version}"
+fi
 
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
